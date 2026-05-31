@@ -35,12 +35,11 @@ def normalize_url(url):
             if not url.endswith('/orig') and not '?' in url.split('/')[-1]:
                 url = url.rstrip('/') + '/orig'
 
-    # 2. Pinterest: /736x/ -> /originals/
+    # 2. Pinterest: upgrade any size/thumbnail folder to /originals/
     if 'pinimg.com' in url:
-        if '/736x/' in url:
-            url = url.replace('/736x/', '/originals/')
-        elif '/236x/' in url:
-            url = url.replace('/236x/', '/originals/')
+        url = re.sub(r'\/[a-z0-9_]+_RS\/', '/originals/', url)
+        url = re.sub(r'\/\d+x\d+\/', '/originals/', url)
+        url = re.sub(r'\/\d+x\/', '/originals/', url)
 
     # 3. Strip common resizing query parameters from any source URL
     try:
@@ -188,14 +187,15 @@ async def scrape_images(url, autoscroll=True):
         try:
             from urllib.parse import urlencode, urlunparse
             
+            parsed = urlparse(url)
+            referer = f"{parsed.scheme}://{parsed.netloc}/"
+            
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',
-                'Referer': 'https://yandex.com/'
+                'Referer': referer
             }
             
-            # Check if this is a Yandex Image search URL
-            parsed = urlparse(url)
             qs = parse_qs(parsed.query)
             
             urls_to_fetch = []
@@ -218,7 +218,7 @@ async def scrape_images(url, autoscroll=True):
                         requests.get, 
                         page_url, 
                         headers=headers, 
-                        timeout=10
+                        timeout=15
                     )
                     return response.text if response.status_code == 200 else ""
                 except Exception as e:
@@ -378,6 +378,103 @@ async def scrape_images(url, autoscroll=True):
             continue
         add_img(url, alt)
 
+    # 1.5 Social Metadata Tags Extractor
+    meta_tags = [
+        ('property', 'og:image'),
+        ('property', 'og:image:secure_url'),
+        ('name', 'twitter:image'),
+        ('name', 'twitter:image:src'),
+        ('property', 'pinterest:image')
+    ]
+    for attr, name in meta_tags:
+        for tag in soup.find_all('meta', attrs={attr: name}):
+            content_val = tag.get('content')
+            if content_val and content_val.startswith('http'):
+                add_img(content_val, f'Meta {name}')
+
+    # 1.6 Application/LD+JSON schema extractor
+    def find_urls_in_json(data):
+        found = []
+        if isinstance(data, dict):
+            for k, v in data.items():
+                if k in ['image', 'contentUrl', 'thumbnailUrl']:
+                    if isinstance(v, str) and v.startswith('http'):
+                        found.append((v, k))
+                    elif isinstance(v, dict) and 'url' in v and isinstance(v['url'], str):
+                        found.append((v['url'], k))
+                    elif isinstance(v, list):
+                        for item in v:
+                            if isinstance(item, str) and item.startswith('http'):
+                                found.append((item, k))
+                            elif isinstance(item, dict) and 'url' in item and isinstance(item['url'], str):
+                                found.append((item['url'], k))
+                else:
+                    found.extend(find_urls_in_json(v))
+        elif isinstance(data, list):
+            for item in data:
+                found.extend(find_urls_in_json(item))
+        return found
+
+    for script in soup.find_all('script', type='application/ld+json'):
+        if not script.string: continue
+        try:
+            ld_data = json.loads(script.string)
+            for ld_url, ld_key in find_urls_in_json(ld_data):
+                add_img(ld_url, f"LD+JSON {ld_key}")
+        except:
+            pass
+
+    # 1.7 Pinterest State Extractor (__PWS_DATA__)
+    pws_data = soup.find('script', id='__PWS_DATA__')
+    if pws_data and pws_data.string:
+        try:
+            pws_json = json.loads(pws_data.string)
+            def find_pinimg_urls(obj):
+                found = []
+                if isinstance(obj, dict):
+                    if 'url' in obj and isinstance(obj['url'], str) and 'pinimg.com' in obj['url']:
+                        found.append((obj['url'], obj.get('width', 0), obj.get('height', 0)))
+                    for val in obj.values():
+                        found.extend(find_pinimg_urls(val))
+                elif isinstance(obj, list):
+                    for item in obj:
+                        found.extend(find_pinimg_urls(item))
+                elif isinstance(obj, str):
+                    if 'pinimg.com' in obj and (obj.endswith('.jpg') or obj.endswith('.png') or obj.endswith('.webp') or '.jpg?' in obj):
+                        found.append((obj, 0, 0))
+                return found
+            
+            for pinimg_url, pin_w, pin_h in find_pinimg_urls(pws_json):
+                add_img(pinimg_url, "Pinterest State Image", pin_w, pin_h)
+        except:
+            pass
+
+    # 1.8 Responsive source srcset elements
+    for source_tag in soup.find_all(['source', 'img'], srcset=True):
+        srcset_str = source_tag.get('srcset')
+        if srcset_str:
+            parts = srcset_str.split(',')
+            for part in parts:
+                part = part.strip()
+                if not part: continue
+                subparts = part.split()
+                if subparts:
+                    srcset_url = subparts[0]
+                    # Attempt to resolve width if present (e.g. 1080w)
+                    w_val = 0
+                    if len(subparts) > 1:
+                        desc = subparts[1].lower()
+                        if desc.endswith('w'):
+                            try: w_val = int(desc[:-1])
+                            except: pass
+                    add_img(srcset_url, 'Responsive Source', w_val, 0)
+
+    # 1.9 Direct Anchor Image Links (often pointing directly to high-res raw images)
+    for a_tag in soup.find_all('a', href=True):
+        href_val = a_tag.get('href')
+        if href_val and any(ext in href_val.lower() for ext in ['.jpg', '.jpeg', '.png', '.webp']):
+            add_img(href_val, 'Direct Link')
+
     # 2. Extract from final DOM (BS4) - especially links
     for link in soup.find_all('a', class_=['ImagesContentImage-Cover', 'serp-item__link', 'serp-item__item']):
         try:
@@ -390,7 +487,7 @@ async def scrape_images(url, autoscroll=True):
 
     # 3. Fallback: all images (Filter out small ones if possible)
     for img in soup.find_all('img'):
-        src = img.get('src') or img.get('data-src') or img.get('data-original')
+        src = img.get('src') or img.get('data-src') or img.get('data-original') or img.get('data-lazy') or img.get('data-lazy-src')
         if not src: continue
         
         # Skip common UI icons or very small thumbnails
@@ -398,7 +495,6 @@ async def scrape_images(url, autoscroll=True):
         
         # If it's a Yandex thumbnail, we prefer the metadata version
         if 'avatars.mds.yandex.net' in src and '/i?id=' in src:
-            # Skip thumbnail fallbacks since we extract high-res equivalents from metadata
             continue
             
         add_img(src, img.get('alt', ''))
