@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Scraper Pro — Elegant High-Resolution Asset Scraper</title>
+    <meta name="description" content="Instantly extract, filter, select, and batch-download high-resolution image assets in standard formats or a unified ZIP archive from any web page.">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <!-- Background glowing decorative blobs -->
+    <div class="blob-container">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+        <!-- Cursor-follow spotlight glow -->
+        <div id="cursorGlow" class="cursor-glow"></div>
+        <!-- Subtle noise texture for depth -->
+        <div class="noise-overlay"></div>
+    </div>
+
+    <!-- Main Application Glass Container -->
+    <main class="glass-container">
+        <header>
+            <div class="theme-toggle-container">
+                <button id="themeToggleBtn" class="theme-toggle-btn" aria-label="Toggle Light/Dark Theme" title="Toggle Light/Dark Theme">
+                    <i data-lucide="sun"></i>
+                </button>
+            </div>
+            <div class="logo">
+                <i data-lucide="image-down" aria-hidden="true"></i>
+                <h1>Image Scraper <span>Pro</span></h1>
+            </div>
+            <p class="subtitle">Extract high-resolution visual assets from any URL instantly.</p>
+        </header>
+
+        <!-- Scraping Input Form -->
+        <section class="input-section" aria-label="URL Submission">
+            <div class="input-wrapper">
+                <input type="text" id="urlInput" placeholder="Enter target website URL (e.g. gallery link)" aria-label="Scrape URL Input" />
+                <div class="toggle-group">
+                    <label class="switch" for="autoscrollToggle">
+                        <input type="checkbox" id="autoscrollToggle" checked>
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-label">Deep Scrape</span>
+                </div>
+                <button id="scrapeBtn" class="btn-primary" aria-label="Extract Images Button">
+                    <span class="btn-text">Extract Images</span>
+                    <i data-lucide="zap" aria-hidden="true"></i>
+                </button>
+            </div>
+        </section>
+
+        <!-- Dynamic Loader Grid -->
+        <div id="loader" class="loader hidden" aria-live="polite">
+            <div class="spinner"></div>
+            <p>Deep scraping with auto-scroll... (This may take up to 30s)</p>
+        </div>
+
+        <!-- Scraping Results Panel -->
+        <section id="resultsSection" class="results-section hidden" aria-label="Extraction Results">
+            <!-- Filtering & Bulk Download Toolbar -->
+            <div class="controls">
+                <div class="filter-group">
+                    <span class="filter-label">Filter:</span>
+                    <select id="filterSelect" aria-label="Filter image types">
+                        <option value="all">All Formats</option>
+                        <option value="png">PNGs</option>
+                        <option value="jpg">JPEGs</option>
+                        <option value="webp">WEBP</option>
+                        <option value="hd">Ultra HD (1080p+)</option>
+                    </select>
+                </div>
+                <div class="action-group">
+                    <span id="imageCount">Found 0 images</span>
+                    <button id="downloadBtn" class="btn-outline" title="Download selected or all images as individual files">
+                        <span>Download Files</span>
+                        <i data-lucide="download"></i>
+                    </button>
+                    <button id="downloadZipBtn" class="btn-secondary" title="Compile and download all selected or filtered images as a single high-speed ZIP archive">
+                        <span>Download ZIP</span>
+                        <i data-lucide="folder-archive"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Selection helper toolbar -->
+            <div id="selectionBar" class="selection-bar hidden">
+                <span id="selectionInfo" class="selection-info">0 images selected</span>
+                <div class="selection-actions">
+                    <button id="selectAllBtn" class="btn-text-only">Select All</button>
+                    <button id="clearSelectionBtn" class="btn-text-only">Clear Selection</button>
+                </div>
+            </div>
+
+            <!-- Scrollable Image Results Grid -->
+            <div id="imageGrid" class="image-grid" tabindex="0" aria-label="Scraped image results"></div>
+        </section>
+    </main>
+
+    <!-- Modal 1: Downloading Popup with Progress & Speed/ETC -->
+    <div id="downloadModal" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="downloadModalTitle">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="downloadModalTitle">Downloading Assets</h3>
+                <p class="modal-status-text" id="downloadModalStatus">Initializing connections...</p>
+            </div>
+            
+            <div class="progress-container">
+                <!-- Linear Progress Bar -->
+                <div class="progress-bar-bg">
+                    <div id="progressBarFill" class="progress-bar-fill"></div>
+                </div>
+                
+                <!-- Speed and Estimation Grid -->
+                <div class="progress-stats">
+                    <div class="stat-box">
+                        <span class="stat-label">Progress</span>
+                        <span id="statProgress" class="stat-value">0%</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-label">Speed</span>
+                        <span id="statSpeed" class="stat-value">0.0 MB/s</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-label">ETC</span>
+                        <span id="statEta" class="stat-value">--:--</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Live download telemetry logs -->
+            <div id="downloadLog" class="modal-log">
+                <div class="log-entry">Waiting for worker allocation...</div>
+            </div>
+            
+            <div class="modal-footer">
+                <button id="cancelDownloadBtn" class="btn-danger" aria-label="Cancel download queue">Cancel Download</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 2: Lightbox Image Carousel & Inspector -->
+    <div id="lightboxModal" class="lightbox-overlay" aria-modal="true" role="dialog" aria-labelledby="lightboxTitle">
+        <div class="lightbox-header">
+            <span id="lightboxTitle" class="lightbox-title">Image Asset Details</span>
+            <div class="lightbox-controls">
+                <button id="lightboxDownloadBtn" class="btn-lightbox" title="Download Image Asset" aria-label="Download Image Asset">
+                    <i data-lucide="download"></i>
+                </button>
+                <button id="lightboxCloseBtn" class="btn-lightbox" title="Close Preview" aria-label="Close Preview">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="lightbox-body">
+            <button id="lightboxPrevBtn" class="btn-nav" title="Previous Image" aria-label="Previous Image">
+                <i data-lucide="chevron-left"></i>
+            </button>
+            
+            <div class="lightbox-image-container">
+                <img id="lightboxImg" class="lightbox-img" src="" alt="Full resolution scraped asset">
+            </div>
+            
+            <button id="lightboxNextBtn" class="btn-nav" title="Next Image" aria-label="Next Image">
+                <i data-lucide="chevron-right"></i>
+            </button>
+        </div>
+        
+        <div class="lightbox-footer">
+            <div id="lightboxMeta" class="lightbox-meta">Dimensions: Original | Type: JPG</div>
+            <div id="lightboxCounter" class="lightbox-counter">1 of 12</div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script src="main.js"></script>
+</body>
+</html>
