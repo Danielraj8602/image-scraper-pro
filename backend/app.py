@@ -143,8 +143,22 @@ async def scrape_images(url, autoscroll=True):
     # Try using Playwright first
     try:
         async with async_playwright() as p:
-            # Use a real-looking user agent
-            browser = await p.chromium.launch(headless=True)
+            # Check if we should connect to a remote headless browser (perfect for Vercel Serverless!)
+            browserless_token = os.environ.get('BROWSERLESS_TOKEN')
+            remote_browser_url = os.environ.get('REMOTE_BROWSER_URL')
+            
+            if browserless_token:
+                ws_endpoint = f"wss://chrome.browserless.io?token={browserless_token}"
+                print("Connecting to remote Browserless browser on Vercel...")
+                browser = await p.chromium.connect_over_cdp(ws_endpoint)
+            elif remote_browser_url:
+                print(f"Connecting to remote browser at {remote_browser_url}...")
+                browser = await p.chromium.connect_over_cdp(remote_browser_url)
+            else:
+                # Local headless launch (flawless on localhost)
+                print("Launching local headless Chromium browser...")
+                browser = await p.chromium.launch(headless=True)
+                
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
             )
@@ -170,18 +184,52 @@ async def scrape_images(url, autoscroll=True):
             await browser.close()
     except Exception as playwright_err:
         print(f"Playwright scraping failed or is not supported in this environment: {playwright_err}")
-        print("Falling back to direct HTTP request using requests...")
+        print("Falling back to direct HTTP requests pagination multi-fetch...")
         try:
+            from urllib.parse import urlencode, urlunparse
+            
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',
                 'Referer': 'https://yandex.com/'
             }
-            # Fetch directly using requests (extremely fast, compatible anywhere)
-            response = requests.get(url, headers=headers, timeout=15)
-            content = response.text
+            
+            # Check if this is a Yandex Image search URL
+            parsed = urlparse(url)
+            qs = parse_qs(parsed.query)
+            
+            urls_to_fetch = []
+            if 'yandex' in parsed.netloc and '/images/' in parsed.path:
+                # Generate 10 pages for Yandex search (p=0 to p=9) to harvest 300+ images
+                for page_num in range(10):
+                    new_qs = qs.copy()
+                    new_qs['p'] = [str(page_num)]
+                    new_query = urlencode(new_qs, doseq=True)
+                    new_parsed = parsed._replace(query=new_query)
+                    urls_to_fetch.append(urlunparse(new_parsed))
+            else:
+                urls_to_fetch = [url]
+            
+            print(f"Direct fetch: targeting {len(urls_to_fetch)} page(s) in parallel...")
+            
+            async def fetch_page(page_url):
+                try:
+                    response = await asyncio.to_thread(
+                        requests.get, 
+                        page_url, 
+                        headers=headers, 
+                        timeout=10
+                    )
+                    return response.text if response.status_code == 200 else ""
+                except Exception as e:
+                    print(f"Error fetching page {page_url}: {e}")
+                    return ""
+            
+            # Fetch all pages concurrently in parallel threads
+            contents = await asyncio.gather(*(fetch_page(u) for u in urls_to_fetch))
+            content = "\n".join(contents)
         except Exception as req_err:
-            print(f"Direct request fallback failed: {req_err}")
+            print(f"Direct multi-fetch fallback failed: {req_err}")
             content = ""
 
     soup = BeautifulSoup(content, 'html.parser')
