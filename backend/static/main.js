@@ -122,8 +122,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Scraping Controller
     // ==========================================================================
     scrapeBtn.addEventListener('click', async () => {
-        const url = urlInput.value.trim();
+        let url = urlInput.value.trim();
         if (!url) return alert('Please enter a valid URL');
+
+        if (!/^https?:\/\//i.test(url)) {
+            url = 'https://' + url.replace(/^\/+/, '');
+            urlInput.value = url;
+        }
 
         resultsSection.classList.add('hidden');
         loader.classList.remove('hidden');

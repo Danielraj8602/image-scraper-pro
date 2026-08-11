@@ -143,6 +143,9 @@ async def auto_scroll(page, accumulation_set, max_scrolls=30):
         last_height = new_height
 
 async def scrape_images(url, autoscroll=True):
+    if not url.startswith('http://') and not url.startswith('https://'):
+        url = 'https://' + url.lstrip('/')
+        
     parsed = urlparse(url)
     accumulated_data = set()
     captured_network_urls = set()
@@ -490,17 +493,24 @@ def index():
 @app.route('/api/scrape', methods=['POST'])
 async def api_scrape():
     data = request.json or {}
-    url = data.get('url')
+    url = data.get('url', '').strip()
     autoscroll = data.get('autoscroll', True)
     if not url:
         return jsonify({'error': 'URL is required'}), 400
     
+    if not url.startswith('http://') and not url.startswith('https://'):
+        url = 'https://' + url.lstrip('/')
+    
     try:
-        images = await asyncio.wait_for(scrape_images(url, autoscroll=autoscroll), timeout=14.0)
+        images = await asyncio.wait_for(scrape_images(url, autoscroll=autoscroll), timeout=20.0)
         return jsonify({'images': images})
     except asyncio.TimeoutError:
-        print("Scrape reached 14s threshold - returning harvested results to prevent 502 timeout")
-        return jsonify({'images': []})
+        print("Scrape reached 20s threshold - fetching fallback results...")
+        try:
+            images = await scrape_images(url, autoscroll=False)
+            return jsonify({'images': images})
+        except Exception:
+            return jsonify({'images': []})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
