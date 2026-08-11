@@ -182,23 +182,30 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyFilter() {
         const activeFilter = filterSelect.value;
 
+        // Base filter: Enforce minimum 400px dimension requirement
+        let baseList = allImages.filter(img => {
+            if (img.width !== 'Original' && typeof img.width === 'number' && img.width < 400) return false;
+            if (img.height !== 'Original' && typeof img.height === 'number' && img.height < 400) return false;
+            return true;
+        });
+
         if (activeFilter === 'all') {
-            filteredImages = allImages;
+            filteredImages = baseList;
         } else if (activeFilter === 'hd') {
-            filteredImages = allImages.filter(img =>
+            filteredImages = baseList.filter(img =>
                 (img.width !== 'Original' && img.width >= 1080) ||
                 (img.height !== 'Original' && img.height >= 1080) ||
                 img.alt === 'Highest Quality Asset' ||
                 img.alt === 'Search Source (Original)'
             );
         } else {
-            filteredImages = allImages.filter(img => {
+            filteredImages = baseList.filter(img => {
                 const ext = img.url.split('.').pop().split('?')[0].toLowerCase();
                 if (activeFilter === 'jpg') return ext === 'jpg' || ext === 'jpeg';
                 return ext === activeFilter;
             });
         }
-        imageCount.textContent = `Found ${filteredImages.length} images`;
+        imageCount.textContent = `Found ${filteredImages.length} images (≥400px)`;
         
         // Clean out selected URLs that are no longer in the filtered set
         const filteredUrlsSet = new Set(filteredImages.map(img => img.url));
@@ -550,9 +557,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     } catch (e) {}
 
-                    // 2. High-speed backend proxy fetch attempt
+                    // 2. High-speed backend proxy fetch with 3 retries and staggering
                     if (!blob || blob.size === 0) {
-                        for (let attempt = 0; attempt < 2; attempt++) {
+                        for (let attempt = 0; attempt < 3; attempt++) {
                             try {
                                 const proxyRes = await fetch(proxyUrl, { redirect: 'follow' });
                                 if (proxyRes && proxyRes.ok) {
@@ -560,22 +567,64 @@ document.addEventListener('DOMContentLoaded', () => {
                                     if (blob && blob.size > 0) break;
                                 }
                             } catch (e) {}
-                            if (attempt === 0) await new Promise(r => setTimeout(r, 150));
+                            await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
                         }
+                    }
+
+                    // 3. Fallback: Extract from loaded DOM image canvas if network request failed
+                    if (!blob || blob.size === 0) {
+                        try {
+                            const domImgs = Array.from(document.querySelectorAll('.img-card img'));
+                            const domMatch = domImgs.find(el => el.src.includes(encodeURIComponent(cleanUrl)) || el.src.includes(cleanUrl));
+                            if (domMatch && domMatch.complete && domMatch.naturalWidth > 0) {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = domMatch.naturalWidth;
+                                canvas.height = domMatch.naturalHeight;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(domMatch, 0, 0);
+                                blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.95));
+                            }
+                        } catch (e) {}
                     }
 
                     let ext = cleanUrl.split('.').pop().split('?')[0].toLowerCase();
                     if (!['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext)) ext = 'jpg';
 
                     if (blob && blob.size > 100) {
-                        downloadedBytes += blob.size;
-                        successCount++;
-                        
-                        if (folder) {
-                            const filename = `asset_${myIndex + 1}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
-                            folder.file(filename, blob);
-                        }
-                        addLogEntry(`✔ Asset ${myIndex + 1}/${targets.length} compiled (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
+                        // Enforce minimum 400px dimension requirement before ZIP inclusion
+                        const imgTest = new Image();
+                        const blobUrl = URL.createObjectURL(blob);
+                        await new Promise((res) => {
+                            imgTest.onload = () => {
+                                if (imgTest.naturalWidth >= 400 && imgTest.naturalHeight >= 400) {
+                                    downloadedBytes += blob.size;
+                                    successCount++;
+                                    if (folder) {
+                                        const filename = `asset_${myIndex + 1}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+                                        folder.file(filename, blob);
+                                    }
+                                    addLogEntry(`✔ Asset ${myIndex + 1}/${targets.length} compiled (${imgTest.naturalWidth}x${imgTest.naturalHeight}px)`, 'success');
+                                } else {
+                                    addLogEntry(`ℹ Asset ${myIndex + 1} skipped (${imgTest.naturalWidth}x${imgTest.naturalHeight}px < 400px requirement)`, 'warning');
+                                }
+                                URL.revokeObjectURL(blobUrl);
+                                res();
+                            };
+                            imgTest.onerror = () => {
+                                if (blob.size > 30 * 1024) { // Binary non-image fallback safety net
+                                    downloadedBytes += blob.size;
+                                    successCount++;
+                                    if (folder) {
+                                        const filename = `asset_${myIndex + 1}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+                                        folder.file(filename, blob);
+                                    }
+                                    addLogEntry(`✔ Asset ${myIndex + 1}/${targets.length} compiled (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
+                                }
+                                URL.revokeObjectURL(blobUrl);
+                                res();
+                            };
+                            imgTest.src = blobUrl;
+                        });
                     }
                 } catch (err) {
                     console.error('ZIP fetch notice:', img.url, err);

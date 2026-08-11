@@ -272,6 +272,10 @@ async def scrape_images(url, autoscroll=True):
         except:
             w_val, h_val = 0, 0
 
+        # Enforce minimum 400px dimension restriction (don't download below 400px)
+        if (w_val > 0 and w_val < 400) or (h_val > 0 and h_val < 400):
+            return
+
         if url in seen_urls: return
         seen_urls.add(url)
         
