@@ -145,45 +145,12 @@ async def scrape_images(url, autoscroll=True):
     parsed = urlparse(url)
     accumulated_data = set()
     content = ""
-    
-    try:
-        async with async_playwright() as p:
-            browserless_token = os.environ.get('BROWSERLESS_TOKEN')
-            remote_browser_url = os.environ.get('REMOTE_BROWSER_URL')
-            
-            if browserless_token:
-                ws_endpoint = f"wss://chrome.browserless.io?token={browserless_token}"
-                browser = await p.chromium.connect_over_cdp(ws_endpoint)
-            elif remote_browser_url:
-                browser = await p.chromium.connect_over_cdp(remote_browser_url)
-            else:
-                browser = await p.chromium.launch(headless=True)
-                
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-            )
-            page = await context.new_page()
-            
-            try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=35000)
-                await asyncio.sleep(2)
-                
-                if autoscroll:
-                    await auto_scroll(page, accumulated_data, max_scrolls=30)
-                else:
-                    await page.evaluate("window.scrollTo(0, 1000)") 
-                    await asyncio.sleep(2)
-            except Exception as e:
-                print(f"Page load/scroll failed: {e}")
-            
-            content = await page.content()
-            await browser.close()
-    except Exception as playwright_err:
-        print(f"Playwright fallback to direct HTTP multi-fetch: {playwright_err}")
+    is_pinterest = any(domain in parsed.netloc for domain in ['pinterest', 'pin.it', 'pinimg'])
+
+    # Fast Direct HTTP Multi-Fetch Engine (Used for Pinterest & lightweight sites to guarantee <2s speed without 502 timeouts)
+    if is_pinterest or not os.environ.get('ENABLE_PLAYWRIGHT', ''):
         try:
-            parsed = urlparse(url)
             referer = f"{parsed.scheme}://{parsed.netloc}/"
-            
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -194,42 +161,69 @@ async def scrape_images(url, autoscroll=True):
                 'Sec-Ch-Ua-Platform': '"Windows"',
                 'Sec-Fetch-Dest': 'document',
                 'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'same-origin' if 'pinterest' in parsed.netloc or 'yandex' in parsed.netloc else 'cross-site',
+                'Sec-Fetch-Site': 'same-origin',
                 'Upgrade-Insecure-Requests': '1'
             }
-            
+
             qs = parse_qs(parsed.query)
-            urls_to_fetch = []
-            
-            if 'yandex' in parsed.netloc and '/images/' in parsed.path:
-                # Generate 15 pages for Yandex search (p=0 to p=14) to harvest 400+ images fast
+            urls_to_fetch = [url]
+
+            if is_pinterest:
+                # If URL is a visual search / crop / closeup pin, also fetch canonical pin page
+                pin_id_match = re.search(r'/pin/(\d+)', parsed.path)
+                if pin_id_match:
+                    pin_id = pin_id_match.group(1)
+                    canonical_pin = f"https://www.pinterest.com/pin/{pin_id}/"
+                    if canonical_pin not in urls_to_fetch:
+                        urls_to_fetch.append(canonical_pin)
+            elif 'yandex' in parsed.netloc and '/images/' in parsed.path:
                 for page_num in range(15):
                     new_qs = qs.copy()
                     new_qs['p'] = [str(page_num)]
-                    new_query = urlencode(new_qs, doseq=True)
-                    urls_to_fetch.append(urlunparse(parsed._replace(query=new_query)))
+                    urls_to_fetch.append(urlunparse(parsed._replace(query=urlencode(new_qs, doseq=True))))
             elif ('google' in parsed.netloc or 'bing' in parsed.netloc or 'yahoo' in parsed.netloc) and ('search' in parsed.path or 'q' in qs):
-                # Search engine pagination
                 for p_num in range(1, 6):
                     new_qs = qs.copy()
                     new_qs['page'] = [str(p_num)]
                     new_qs['p'] = [str(p_num)]
                     new_qs['start'] = [str((p_num - 1) * 20)]
                     urls_to_fetch.append(urlunparse(parsed._replace(query=urlencode(new_qs, doseq=True))))
-            else:
-                # Single Pinterest pin, board, gallery, or individual web page
-                urls_to_fetch = [url]
-            
+
             async def fetch_page(page_url):
                 try:
-                    response = await asyncio.to_thread(http_session.get, page_url, headers=headers, timeout=12)
+                    response = await asyncio.to_thread(http_session.get, page_url, headers=headers, timeout=8)
                     return response.text if response.status_code == 200 else ""
-                except Exception as e:
+                except Exception:
                     return ""
-            
+
             contents = await asyncio.gather(*(fetch_page(u) for u in urls_to_fetch))
             content = "\n".join(contents)
-        except Exception as req_err:
+        except Exception:
+            content = ""
+    else:
+        # Fallback to Playwright for heavy non-Pinterest SPA apps if explicitly enabled
+        try:
+            async with async_playwright() as p:
+                browserless_token = os.environ.get('BROWSERLESS_TOKEN')
+                remote_browser_url = os.environ.get('REMOTE_BROWSER_URL')
+                
+                if browserless_token:
+                    ws_endpoint = f"wss://chrome.browserless.io?token={browserless_token}"
+                    browser = await p.chromium.connect_over_cdp(ws_endpoint)
+                elif remote_browser_url:
+                    browser = await p.chromium.connect_over_cdp(remote_browser_url)
+                else:
+                    browser = await p.chromium.launch(headless=True)
+                    
+                context = await browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                )
+                page = await context.new_page()
+                await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                await asyncio.sleep(1)
+                content = await page.content()
+                await browser.close()
+        except Exception:
             content = ""
 
     soup = BeautifulSoup(content, 'html.parser')
