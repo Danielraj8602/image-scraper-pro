@@ -106,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
             themeToggleBtn.setAttribute('title', 'Switch to Dark Theme');
         } else {
             themeToggleBtn.innerHTML = '<i data-lucide="sun"></i>';
-            themeToggleBtn.setAttribute('title', 'Switch to Burgundy Light Theme');
+            themeToggleBtn.setAttribute('title', 'Switch to Cyber Frost Light Theme');
         }
         lucide.createIcons();
     }
@@ -360,14 +360,13 @@ document.addEventListener('DOMContentLoaded', () => {
         cancelDownloadBtn.disabled = false;
         showProgressModal('Downloading Individual Assets', `Processing 0 of ${targets.length}...`);
 
-        const CONCURRENCY = 5; // 5 parallel downloads at a time
+        const CONCURRENCY = 6;
         let completed = 0;
         let success = 0;
         let downloadedBytes = 0;
         let currentIndex = 0;
         const startTime = Date.now();
         
-        // Active worker promises
         const workers = [];
 
         async function worker() {
@@ -384,7 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     let blob = null;
 
                     try {
-                        response = await fetch(proxyUrl);
+                        response = await fetch(proxyUrl, { redirect: 'follow' });
                         if (response && response.ok) {
                             blob = await response.blob();
                         }
@@ -392,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     if (!blob || blob.size === 0) {
                         try {
-                            const directRes = await fetch(img.url, { mode: 'cors' });
+                            const directRes = await fetch(img.url, { mode: 'cors', redirect: 'follow' });
                             if (directRes && directRes.ok) {
                                 blob = await directRes.blob();
                             }
@@ -400,7 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     
                     let ext = img.url.split('.').pop().split('?')[0].toLowerCase();
-                    if (!['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) ext = 'jpg';
+                    if (!['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext)) ext = 'jpg';
 
                     if (blob && blob.size > 0) {
                         const duration = (Date.now() - timeStart) / 1000;
@@ -409,26 +408,31 @@ document.addEventListener('DOMContentLoaded', () => {
                         const objUrl = window.URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = objUrl;
-                        a.download = `image_${myIndex + 1}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+                        a.download = `asset_${myIndex + 1}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
                         document.body.appendChild(a);
                         a.click();
+                        
+                        // Give browser time to register download before revoking
+                        await new Promise(r => setTimeout(r, 120));
                         window.URL.revokeObjectURL(objUrl);
                         a.remove();
                         
                         success++;
-                        addLogEntry(`✔ File ${myIndex + 1} completed (${(blob.size / 1024).toFixed(1)} KB) in ${duration.toFixed(1)}s`, 'success');
+                        addLogEntry(`✔ File ${myIndex + 1} completed (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
                     } else {
-                        // Ultimate Fallback: Direct Anchor Trigger
+                        // Direct download link trigger with target _blank
                         const a = document.createElement('a');
                         a.href = img.url;
                         a.target = '_blank';
-                        a.download = `image_${myIndex + 1}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+                        a.rel = 'noopener noreferrer';
+                        a.download = `asset_${myIndex + 1}.${ext}`;
                         document.body.appendChild(a);
                         a.click();
+                        await new Promise(r => setTimeout(r, 120));
                         a.remove();
 
                         success++;
-                        addLogEntry(`✔ File ${myIndex + 1} downloaded via direct link fallback`, 'success');
+                        addLogEntry(`✔ File ${myIndex + 1} opened directly`, 'success');
                     }
                 } catch (err) {
                     console.error('Download failed for:', img.url, err);
@@ -436,9 +440,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 } finally {
                     completed++;
                     
+                    // Throttle worker loop slightly to keep browser UI responsive
+                    await new Promise(r => setTimeout(r, 50));
+                    
                     // Live Telemetry Calculations
                     const elapsed = (Date.now() - startTime) / 1000;
-                    const speed = downloadedBytes / elapsed; // bytes/sec
+                    const speed = downloadedBytes / (elapsed || 1);
                     
                     // Format Speed
                     let speedText = '0.0 MB/s';

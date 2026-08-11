@@ -4,12 +4,23 @@ import uuid
 import zipfile
 import io
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import re
-from flask import Flask, request, jsonify, send_file, send_from_directory
+import html
+import json
+from flask import Flask, request, jsonify, send_file, send_from_directory, redirect, Response, stream_with_context
 from flask_cors import CORS
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
-from urllib.parse import unquote, urlparse, parse_qs, urljoin
+from urllib.parse import unquote, urlparse, parse_qs, urljoin, urlunparse, urlencode
+
+# Configure Global High-Performance Connection Pool Session
+http_session = requests.Session()
+retries = Retry(total=2, backoff_factor=0.3, status_forcelist=[500, 502, 503, 504])
+adapter = HTTPAdapter(pool_connections=100, pool_maxsize=100, max_retries=retries)
+http_session.mount('http://', adapter)
+http_session.mount('https://', adapter)
 
 def normalize_url(url):
     if not url: return url
@@ -17,18 +28,11 @@ def normalize_url(url):
     
     # 1. Yandex CDN URLs (avatars.mds.yandex.net)
     if 'avatars.mds.yandex.net' in url or 'get-shedevrum' in url:
-        # Standard pattern: .../get-XXX/123/abc/suffix
         if '/get-' in url:
             parts = url.split('/')
             if len(parts) >= 6:
-                # The last part is the size/optimization (e.g., 'small', '300x300', 'orig')
-                last_part_full = parts[-1]
-                # Remove any query parameters from the last part
-                last_part = last_part_full.split('?')[0]
-                
-                # Check if it's already original or if it's a known size that can be upgraded
+                last_part = parts[-1].split('?')[0]
                 if last_part not in ['orig', 'original']:
-                    # We can safely replace the last part with 'orig' for most Yandex 'get-' services
                     parts[-1] = 'orig'
                     url = '/'.join(parts)
         elif '/get-shedevrum/' in url:
@@ -43,29 +47,22 @@ def normalize_url(url):
 
     # 3. Strip common resizing query parameters from any source URL
     try:
-        from urllib.parse import urlparse, parse_qs, urlunparse, urlencode
         parsed = urlparse(url)
         qs = parse_qs(parsed.query)
-        
-        # Common resize/quality params to remove
         params_to_remove = ['w', 'h', 'width', 'height', 'size', 'quality', 'q', 'resize', 'fit', 'n']
         modified = False
         for p in params_to_remove:
             if p in qs:
-                # Only remove if it's not a critical ID param (usually single letter or short)
-                # But 'w' and 'h' are almost always sizes.
                 del qs[p]
                 modified = True
-        
         if modified:
             new_query = urlencode(qs, doseq=True)
             url = urlunparse(parsed._replace(query=new_query))
     except Exception:
         pass
 
-    # 4. Google User Content
+    # 4. Google User Content / Avatars
     if 'googleusercontent.com' in url:
-        # Upgrade =s900 or =s400 to =s0 (original) or a large size
         if '=' in url.split('/')[-1]:
             url = re.sub(r'=s\d+.*$', '=s0', url)
         else:
@@ -76,7 +73,6 @@ def normalize_url(url):
 app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
 
-# Directory for temporary downloads
 TEMP_DIR = "/tmp/temp_downloads" if "VERCEL" in os.environ else "temp_downloads"
 try:
     if not os.path.exists(TEMP_DIR):
@@ -84,26 +80,25 @@ try:
 except Exception as e:
     print(f"Warning: Could not create temp directory {TEMP_DIR}: {e}")
 
-async def auto_scroll(page, accumulation_set, max_scrolls=15):
+async def auto_scroll(page, accumulation_set, max_scrolls=30):
     last_height = await page.evaluate("document.body.scrollHeight")
     
     for i in range(max_scrolls):
-        # JS evaluation to find both thumbnails and high-res links
         current_data = await page.evaluate("""
             () => {
                 const results = [];
                 // Target links that usually wrap gallery images
-                const links = document.querySelectorAll('a[href*="img_url="], a.ImagesContentImage-Cover, a.serp-item__link');
+                const links = document.querySelectorAll('a[href*="img_url="], a.ImagesContentImage-Cover, a.serp-item__link, a[data-pin-media], a[href*="/pin/"]');
                 links.forEach(a => {
                     let highRes = null;
                     try {
                         const urlParams = new URL(a.href, window.location.origin).searchParams;
-                        highRes = urlParams.get('img_url');
+                        highRes = urlParams.get('img_url') || a.getAttribute('data-pin-media');
                     } catch(e) {}
                     const img = a.querySelector('img');
                     if (img || highRes) {
                         results.push({ 
-                            url: highRes || img?.src, 
+                            url: highRes || img?.src || img?.dataset?.src || img?.dataset?.original, 
                             alt: img?.alt || "", 
                             isHighRes: !!highRes 
                         });
@@ -113,10 +108,22 @@ async def auto_scroll(page, accumulation_set, max_scrolls=15):
                 // Also get all images not inside those links
                 const allImgs = document.querySelectorAll('img');
                 allImgs.forEach(img => {
-                    if (!img.closest('a[href*="img_url="]')) {
-                        results.push({ url: img.src, alt: img.alt || "", isHighRes: false });
+                    const src = img.src || img.dataset?.src || img.dataset?.original || img.dataset?.fullSrc;
+                    if (src && !img.closest('a[href*="img_url="]')) {
+                        results.push({ url: src, alt: img.alt || "", isHighRes: false });
                     }
                 });
+
+                // CSS background images
+                const bgElements = document.querySelectorAll('[style*="background"]');
+                bgElements.forEach(el => {
+                    const style = el.getAttribute('style') || '';
+                    const match = style.match(/url\(['"]?(https?:\/\/[^'"\\)]+)['"]?\)/i);
+                    if (match && match[1]) {
+                        results.push({ url: match[1], alt: 'Background Asset', isHighRes: true });
+                    }
+                });
+
                 return results;
             }
         """)
@@ -124,38 +131,31 @@ async def auto_scroll(page, accumulation_set, max_scrolls=15):
         for item in current_data:
             url = item['url']
             if url and not url.startswith('data:') and not 'spacer.gif' in url:
-                # Add normalized URL
                 norm_url = normalize_url(url)
                 accumulation_set.add((norm_url, item['alt'], item['isHighRes']))
 
         await page.evaluate("window.scrollBy(0, window.innerHeight * 1.5)")
-        await asyncio.sleep(1.2)
+        await asyncio.sleep(0.8)
         
         new_height = await page.evaluate("document.body.scrollHeight")
-        if new_height == last_height and i > 5: break
+        if new_height == last_height and i > 8: break
         last_height = new_height
 
 async def scrape_images(url, autoscroll=True):
-    accumulated_data = set() # Store (url, alt) tuples
+    accumulated_data = set()
     content = ""
     
-    # Try using Playwright first
     try:
         async with async_playwright() as p:
-            # Check if we should connect to a remote headless browser (perfect for Vercel Serverless!)
             browserless_token = os.environ.get('BROWSERLESS_TOKEN')
             remote_browser_url = os.environ.get('REMOTE_BROWSER_URL')
             
             if browserless_token:
                 ws_endpoint = f"wss://chrome.browserless.io?token={browserless_token}"
-                print("Connecting to remote Browserless browser on Vercel...")
                 browser = await p.chromium.connect_over_cdp(ws_endpoint)
             elif remote_browser_url:
-                print(f"Connecting to remote browser at {remote_browser_url}...")
                 browser = await p.chromium.connect_over_cdp(remote_browser_url)
             else:
-                # Local headless launch (flawless on localhost)
-                print("Launching local headless Chromium browser...")
                 browser = await p.chromium.launch(headless=True)
                 
             context = await browser.new_context(
@@ -164,29 +164,22 @@ async def scrape_images(url, autoscroll=True):
             page = await context.new_page()
             
             try:
-                print(f"Scraping URL via Playwright: {url}")
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                
-                # Initial wait
+                await page.goto(url, wait_until="domcontentloaded", timeout=35000)
                 await asyncio.sleep(2)
                 
                 if autoscroll:
-                    await auto_scroll(page, accumulated_data, max_scrolls=15)
+                    await auto_scroll(page, accumulated_data, max_scrolls=30)
                 else:
-                    await page.evaluate("window.scrollTo(0, 800)") 
+                    await page.evaluate("window.scrollTo(0, 1000)") 
                     await asyncio.sleep(2)
             except Exception as e:
                 print(f"Page load/scroll failed: {e}")
             
-            # Final extraction from DOM content
             content = await page.content()
             await browser.close()
     except Exception as playwright_err:
-        print(f"Playwright scraping failed or is not supported in this environment: {playwright_err}")
-        print("Falling back to direct HTTP requests pagination multi-fetch...")
+        print(f"Playwright fallback to direct HTTP multi-fetch: {playwright_err}")
         try:
-            from urllib.parse import urlencode, urlunparse
-            
             parsed = urlparse(url)
             referer = f"{parsed.scheme}://{parsed.netloc}/"
             
@@ -197,67 +190,56 @@ async def scrape_images(url, autoscroll=True):
             }
             
             qs = parse_qs(parsed.query)
-            
             urls_to_fetch = []
+            
             if 'yandex' in parsed.netloc and '/images/' in parsed.path:
-                # Generate 10 pages for Yandex search (p=0 to p=9) to harvest 300+ images
-                for page_num in range(10):
+                # Generate 30 pages for Yandex search (p=0 to p=29) to harvest 500+ images
+                for page_num in range(30):
                     new_qs = qs.copy()
                     new_qs['p'] = [str(page_num)]
                     new_query = urlencode(new_qs, doseq=True)
-                    new_parsed = parsed._replace(query=new_query)
-                    urls_to_fetch.append(urlunparse(new_parsed))
+                    urls_to_fetch.append(urlunparse(parsed._replace(query=new_query)))
+            elif any(domain in parsed.netloc for domain in ['google', 'bing', 'yahoo', 'pinterest', 'unsplash', 'artstation', 'behance', 'reddit', 'flickr']):
+                # Universal multi-page search harvester
+                for p_num in range(1, 15):
+                    new_qs = qs.copy()
+                    new_qs['page'] = [str(p_num)]
+                    new_qs['p'] = [str(p_num)]
+                    new_qs['start'] = [str((p_num - 1) * 20)]
+                    urls_to_fetch.append(urlunparse(parsed._replace(query=urlencode(new_qs, doseq=True))))
             else:
                 urls_to_fetch = [url]
             
-            print(f"Direct fetch: targeting {len(urls_to_fetch)} page(s) in parallel...")
-            
             async def fetch_page(page_url):
                 try:
-                    response = await asyncio.to_thread(
-                        requests.get, 
-                        page_url, 
-                        headers=headers, 
-                        timeout=15
-                    )
+                    response = await asyncio.to_thread(http_session.get, page_url, headers=headers, timeout=12)
                     return response.text if response.status_code == 200 else ""
                 except Exception as e:
-                    print(f"Error fetching page {page_url}: {e}")
                     return ""
             
-            # Fetch all pages concurrently in parallel threads
             contents = await asyncio.gather(*(fetch_page(u) for u in urls_to_fetch))
             content = "\n".join(contents)
         except Exception as req_err:
-            print(f"Direct multi-fetch fallback failed: {req_err}")
             content = ""
 
     soup = BeautifulSoup(content, 'html.parser')
     images = []
     seen_urls = set()
 
-    # Helper to add image if unique and high quality
     def add_img(url, alt, w=0, h=0):
         if not url or url.startswith('data:'): return
-        
-        # Skip low-res Yandex search grid thumbnails
-        if 'avatars.mds.yandex.net' in url and '/i?id=' in url:
-            return
-            
-        # Skip SVGs, web icons, tracking pixels, or standard small logos
+        if 'avatars.mds.yandex.net' in url and '/i?id=' in url: return
         if url.split('?')[0].endswith('.svg') or any(k in url.lower() for k in ['favicon', '/tracker', 'pixel.gif', 'doubleclick', 'google-analytics', 'yandex.ru/metrika', 'logo', 'spinner', 'icon']):
             return
             
         url = normalize_url(url)
         
-        # Try to convert w/h to int
         try:
             w_val = int(w) if w and w != 'Original' else 0
             h_val = int(h) if h and h != 'Original' else 0
         except:
             w_val, h_val = 0, 0
 
-        # Deduplication: if we already have this URL, don't add again
         if url in seen_urls: return
         seen_urls.add(url)
         
@@ -270,43 +252,19 @@ async def scrape_images(url, autoscroll=True):
         })
 
     # --- Yandex Metadata Extraction (Highest Resolution) ---
-    import html
-    import json
-    
-    # Dictionary to store best version of each image ID: {id: {url, w, h, alt}}
     best_images = {}
-
-    # 1. Search for JSON-like objects in the content (often entity encoded)
-    # We look for "id":"..." and "origUrl":"..." or "dups":[...]
-    # Pattern to find items that look like image metadata objects
-    # They usually start with {"id":"..." or &quot;id&quot;:&quot;...
-    
-    # Try both encoded and unencoded
     for is_encoded in [True, False]:
         q = '&quot;' if is_encoded else '"'
-        # Look for ID and then either origUrl or dups within a reasonable range
-        # Yandex items are usually within a few thousand characters
         pattern = rf'{q}id{q}\s*:\s*{q}([a-f0-9]{{32}}){q}.*?({q}origUrl{q}|{q}dups{q})'
         matches = re.finditer(pattern, content)
         
         for match in matches:
             img_id = match.group(1)
             start_pos = match.start()
-            # Find the boundaries of this object (approximate)
-            # Usually it's inside {...}
-            # We'll take a chunk and try to find the complete JSON
             chunk = content[start_pos:start_pos+5000]
-            
-            # Unescape if needed
-            if is_encoded:
-                chunk = html.unescape(chunk)
-            
-            # Try to find a valid JSON object starting from {
-            # Since we started at "id", let's backtrack to find {
-            # Or just construct a minimal JSON if we can find the keys
+            if is_encoded: chunk = html.unescape(chunk)
             
             try:
-                # Simple extraction: find origUrl and dimensions directly if JSON parsing is too hard
                 orig_match = re.search(r'"origUrl":"(.*?)"', chunk)
                 dups_match = re.search(r'"dups":\[(.*?)]', chunk)
                 w_match = re.search(r'"width":(\d+)', chunk)
@@ -329,56 +287,23 @@ async def scrape_images(url, autoscroll=True):
                     except: pass
                 
                 if current_best_url:
-                    # Normalize early
                     current_best_url = normalize_url(current_best_url)
-                    
                     if img_id not in best_images:
                         best_images[img_id] = {'url': current_best_url, 'w': current_w, 'h': current_h}
                     else:
-                        # Keep the one with larger area
                         old = best_images[img_id]
                         if (current_w * current_h) > (old['w'] * old['h']):
                             best_images[img_id] = {'url': current_best_url, 'w': current_w, 'h': current_h}
             except: continue
 
-    # Add the best versions found from metadata
     for img_id, data in best_images.items():
         add_img(data['url'], 'Highest Quality Asset', data['w'], data['h'])
-    
-    print(f"Extracted {len(best_images)} unique high-res images from metadata.")
 
-    # 0. Check the target URL itself for a source image (CBIR)
-    try:
-        parsed_target = urlparse(url)
-        target_qs = parse_qs(parsed_target.query)
-        source_search_url = target_qs.get('img_url', target_qs.get('url', [None]))[0]
-        if source_search_url:
-            add_img(unquote(source_search_url), 'Search Source (Original)')
-    except: pass
-
-    # 0.1 Specifically look for CBIR/Source image in DOM
-    try:
-        source_link = soup.find('a', class_='CbirItem-Link') or soup.find('a', class_='CbirHeader-Image')
-        if source_link:
-            href = source_link.get('href')
-            if href and 'img_url=' in href:
-                src = parse_qs(urlparse(href).query).get('img_url', [None])[0]
-                if src: add_img(unquote(src), 'Source Image (High Res)')
-            else:
-                img = source_link.find('img')
-                if img: add_img(img.get('src'), 'Source Image')
-    except: pass
-
-    # 1. Process accumulated images (captured during scroll)
-    # These are usually links with img_url params
+    # Process accumulated images
     for data in list(accumulated_data):
-        url, alt = data[0], data[1]
-        # Skip low-res Yandex thumbnails captured during scrolling
-        if 'avatars.mds.yandex.net' in url and '/i?id=' in url:
-            continue
-        add_img(url, alt)
+        add_img(data[0], data[1])
 
-    # 1.5 Social Metadata Tags Extractor
+    # Social Metadata Tags
     meta_tags = [
         ('property', 'og:image'),
         ('property', 'og:image:secure_url'),
@@ -392,7 +317,7 @@ async def scrape_images(url, autoscroll=True):
             if content_val and content_val.startswith('http'):
                 add_img(content_val, f'Meta {name}')
 
-    # 1.6 Application/LD+JSON schema extractor
+    # JSON-LD Schema Extractor
     def find_urls_in_json(data):
         found = []
         if isinstance(data, dict):
@@ -421,10 +346,9 @@ async def scrape_images(url, autoscroll=True):
             ld_data = json.loads(script.string)
             for ld_url, ld_key in find_urls_in_json(ld_data):
                 add_img(ld_url, f"LD+JSON {ld_key}")
-        except:
-            pass
+        except: pass
 
-    # 1.7 Pinterest State Extractor (__PWS_DATA__)
+    # Pinterest State Extractor (__PWS_DATA__)
     pws_data = soup.find('script', id='__PWS_DATA__')
     if pws_data and pws_data.string:
         try:
@@ -440,66 +364,38 @@ async def scrape_images(url, autoscroll=True):
                     for item in obj:
                         found.extend(find_pinimg_urls(item))
                 elif isinstance(obj, str):
-                    if 'pinimg.com' in obj and (obj.endswith('.jpg') or obj.endswith('.png') or obj.endswith('.webp') or '.jpg?' in obj):
+                    if 'pinimg.com' in obj and any(ext in obj for ext in ['.jpg', '.png', '.webp']):
                         found.append((obj, 0, 0))
                 return found
             
             for pinimg_url, pin_w, pin_h in find_pinimg_urls(pws_json):
                 add_img(pinimg_url, "Pinterest State Image", pin_w, pin_h)
-        except:
-            pass
+        except: pass
 
-    # 1.8 Responsive source srcset elements
+    # Responsive srcset
     for source_tag in soup.find_all(['source', 'img'], srcset=True):
         srcset_str = source_tag.get('srcset')
         if srcset_str:
-            parts = srcset_str.split(',')
-            for part in parts:
+            for part in srcset_str.split(','):
                 part = part.strip()
                 if not part: continue
                 subparts = part.split()
                 if subparts:
-                    srcset_url = subparts[0]
-                    # Attempt to resolve width if present (e.g. 1080w)
-                    w_val = 0
-                    if len(subparts) > 1:
-                        desc = subparts[1].lower()
-                        if desc.endswith('w'):
-                            try: w_val = int(desc[:-1])
-                            except: pass
-                    add_img(srcset_url, 'Responsive Source', w_val, 0)
+                    add_img(subparts[0], 'Responsive Source')
 
-    # 1.9 Direct Anchor Image Links (often pointing directly to high-res raw images)
+    # Direct image links
     for a_tag in soup.find_all('a', href=True):
         href_val = a_tag.get('href')
-        if href_val and any(ext in href_val.lower() for ext in ['.jpg', '.jpeg', '.png', '.webp']):
+        if href_val and any(ext in href_val.lower() for ext in ['.jpg', '.jpeg', '.png', '.webp', '.avif']):
             add_img(href_val, 'Direct Link')
 
-    # 2. Extract from final DOM (BS4) - especially links
-    for link in soup.find_all('a', class_=['ImagesContentImage-Cover', 'serp-item__link', 'serp-item__item']):
-        try:
-            href = link.get('href')
-            if href and 'img_url=' in href:
-                img_url = parse_qs(urlparse(href).query).get('img_url', [None])[0]
-                if img_url:
-                    add_img(unquote(img_url), 'High Res Asset')
-        except: pass
-
-    # 3. Fallback: all images (Filter out small ones if possible)
+    # Fallback img tags
     for img in soup.find_all('img'):
-        src = img.get('src') or img.get('data-src') or img.get('data-original') or img.get('data-lazy') or img.get('data-lazy-src')
+        src = img.get('src') or img.get('data-src') or img.get('data-original') or img.get('data-lazy') or img.get('data-lazy-src') or img.get('data-full-src')
         if not src: continue
-        
-        # Skip common UI icons or very small thumbnails
         if 'icon' in src.lower() or 'logo' in src.lower() or 'spinner' in src.lower(): continue
-        
-        # If it's a Yandex thumbnail, we prefer the metadata version
-        if 'avatars.mds.yandex.net' in src and '/i?id=' in src:
-            continue
-            
         add_img(src, img.get('alt', ''))
     
-    print(f"Total unique images found: {len(images)}")
     return images
 
 @app.route('/')
@@ -544,25 +440,28 @@ def api_proxy_download():
     response = None
     for headers in headers_list:
         try:
-            res = requests.get(url, headers=headers, timeout=12, stream=True)
-            if res.status_code == 200 and res.content:
+            res = http_session.get(url, headers=headers, timeout=12, stream=True)
+            if res.status_code == 200:
                 response = res
                 break
         except Exception as e:
-            print(f"Proxy attempt failed for {url}: {e}")
+            pass
             
     if response and response.status_code == 200:
         content_type = response.headers.get('Content-Type', 'image/jpeg')
         if not content_type or 'text/html' in content_type:
             content_type = 'image/jpeg'
             
-        return send_file(
-            io.BytesIO(response.content),
-            mimetype=content_type,
-            as_attachment=False
+        return Response(
+            stream_with_context(response.iter_content(chunk_size=32768)),
+            content_type=content_type,
+            headers={
+                'Content-Disposition': 'inline',
+                'Access-Control-Allow-Origin': '*'
+            }
         )
 
-    # Fallback to direct client redirect if proxy fetch returned non-200
+    # Direct 302 redirect fallback if proxy download returns non-200
     return redirect(url, code=302)
 
 @app.route('/api/download', methods=['POST'])
@@ -586,21 +485,21 @@ def api_download():
         
         for headers in headers_list:
             try:
-                response = requests.get(url, headers=headers, timeout=10)
+                response = http_session.get(url, headers=headers, timeout=10)
                 if response.status_code == 200 and response.content:
                     ext = url.split('.')[-1].split('?')[0].lower()
                     if not ext or len(ext) > 4 or not ext.isalnum():
                         ext = 'jpg'
                     return index, response.content, ext
             except Exception as e:
-                print(f"Parallel fetch failed for {url}: {e}")
+                pass
         return index, None, None
 
     indexed_urls = list(enumerate(urls))
     downloaded_data = {}
     
-    # Run requests concurrently using up to 12 workers
-    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as executor:
+    # Run requests concurrently using 24 parallel threads
+    with concurrent.futures.ThreadPoolExecutor(max_workers=24) as executor:
         results = executor.map(download_image, indexed_urls)
         for index, content, ext in results:
             if content:
