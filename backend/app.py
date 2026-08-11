@@ -423,46 +423,56 @@ def api_proxy_download():
         return jsonify({'error': 'URL is required'}), 400
     
     parsed = urlparse(url)
-    origin_referer = f"{parsed.scheme}://{parsed.netloc}/" if parsed.netloc else "https://www.google.com/"
+    domain = parsed.netloc.lower()
     
-    headers_list = [
-        {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Referer': origin_referer,
-            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
-        },
-        {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
-        }
-    ]
-    
+    # Domain-specific referer headers for Yandex, Pinterest, Google, etc.
+    referers = []
+    if 'yandex' in domain or 'mds.yandex' in domain:
+        referers = ['https://yandex.com/images/', 'https://yandex.com/', 'https://yandex.ru/', '']
+    elif 'pinimg' in domain or 'pinterest' in domain:
+        referers = ['https://www.pinterest.com/', 'https://pinterest.com/', '']
+    elif 'google' in domain:
+        referers = ['https://www.google.com/', '']
+    else:
+        referers = [f"{parsed.scheme}://{parsed.netloc}/", 'https://www.google.com/', '']
+
+    # URL Fallback Chain: If /orig returns 403/404, try alternative resolution endpoints
+    urls_to_try = [url]
+    if '/orig' in url:
+        urls_to_try.append(url.replace('/orig', '/1200x900'))
+        urls_to_try.append(url.replace('/orig', '/800x600'))
+
     response = None
-    for headers in headers_list:
-        try:
-            res = http_session.get(url, headers=headers, timeout=12, stream=True)
-            if res.status_code == 200:
-                response = res
-                break
-        except Exception as e:
-            pass
+    for target_url in urls_to_try:
+        for ref in referers:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+            }
+            if ref:
+                headers['Referer'] = ref
+            try:
+                res = http_session.get(target_url, headers=headers, timeout=10, stream=True)
+                if res.status_code == 200 and res.content:
+                    response = res
+                    break
+            except Exception:
+                pass
+        if response:
+            break
             
     if response and response.status_code == 200:
         content_type = response.headers.get('Content-Type', 'image/jpeg')
         if not content_type or 'text/html' in content_type:
             content_type = 'image/jpeg'
             
-        return Response(
-            stream_with_context(response.iter_content(chunk_size=32768)),
-            content_type=content_type,
-            headers={
-                'Content-Disposition': 'inline',
-                'Access-Control-Allow-Origin': '*'
-            }
+        return send_file(
+            io.BytesIO(response.content),
+            mimetype=content_type,
+            as_attachment=False
         )
 
-    # Direct 302 redirect fallback if proxy download returns non-200
-    return redirect(url, code=302)
+    return jsonify({'error': 'Asset not reachable on origin server'}), 404
 
 @app.route('/api/download', methods=['POST'])
 def api_download():
@@ -476,23 +486,40 @@ def api_download():
     def download_image(url_index_tuple):
         index, url = url_index_tuple
         parsed = urlparse(url)
-        origin_referer = f"{parsed.scheme}://{parsed.netloc}/" if parsed.netloc else "https://www.google.com/"
+        domain = parsed.netloc.lower()
         
-        headers_list = [
-            {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Referer': origin_referer},
-            {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}
-        ]
-        
-        for headers in headers_list:
-            try:
-                response = http_session.get(url, headers=headers, timeout=10)
-                if response.status_code == 200 and response.content:
-                    ext = url.split('.')[-1].split('?')[0].lower()
-                    if not ext or len(ext) > 4 or not ext.isalnum():
-                        ext = 'jpg'
-                    return index, response.content, ext
-            except Exception as e:
-                pass
+        referers = []
+        if 'yandex' in domain or 'mds.yandex' in domain:
+            referers = ['https://yandex.com/images/', 'https://yandex.com/', 'https://yandex.ru/', '']
+        elif 'pinimg' in domain or 'pinterest' in domain:
+            referers = ['https://www.pinterest.com/', 'https://pinterest.com/', '']
+        elif 'google' in domain:
+            referers = ['https://www.google.com/', '']
+        else:
+            referers = [f"{parsed.scheme}://{parsed.netloc}/", 'https://www.google.com/', '']
+
+        urls_to_try = [url]
+        if '/orig' in url:
+            urls_to_try.append(url.replace('/orig', '/1200x900'))
+            urls_to_try.append(url.replace('/orig', '/800x600'))
+
+        for target_url in urls_to_try:
+            for ref in referers:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+                }
+                if ref:
+                    headers['Referer'] = ref
+                try:
+                    response = http_session.get(target_url, headers=headers, timeout=10)
+                    if response.status_code == 200 and response.content:
+                        ext = url.split('.')[-1].split('?')[0].lower()
+                        if not ext or len(ext) > 4 or not ext.isalnum():
+                            ext = 'jpg'
+                        return index, response.content, ext
+                except Exception:
+                    pass
         return index, None, None
 
     indexed_urls = list(enumerate(urls))

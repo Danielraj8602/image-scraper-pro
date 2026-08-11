@@ -420,19 +420,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         success++;
                         addLogEntry(`✔ File ${myIndex + 1} completed (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
                     } else {
-                        // Direct download link trigger with target _blank
-                        const a = document.createElement('a');
-                        a.href = img.url;
-                        a.target = '_blank';
-                        a.rel = 'noopener noreferrer';
-                        a.download = `asset_${myIndex + 1}.${ext}`;
-                        document.body.appendChild(a);
-                        a.click();
-                        await new Promise(r => setTimeout(r, 120));
-                        a.remove();
-
-                        success++;
-                        addLogEntry(`✔ File ${myIndex + 1} opened directly`, 'success');
+                        addLogEntry(`✖ File ${myIndex + 1} unavailable on origin CDN`, 'fail');
                     }
                 } catch (err) {
                     console.error('Download failed for:', img.url, err);
