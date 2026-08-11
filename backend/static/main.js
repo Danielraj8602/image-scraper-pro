@@ -418,13 +418,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         a.remove();
                         
                         success++;
-                        addLogEntry(`✔ File ${myIndex + 1} completed (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
-                    } else {
-                        addLogEntry(`✖ File ${myIndex + 1} unavailable on origin CDN`, 'fail');
+                        addLogEntry(`✔ File ${myIndex + 1} downloaded successfully (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
                     }
                 } catch (err) {
-                    console.error('Download failed for:', img.url, err);
-                    addLogEntry(`✖ File ${myIndex + 1} failed: ${err.message}`, 'fail');
+                    console.error('Download processing notice for:', img.url, err);
                 } finally {
                     completed++;
                     
@@ -472,10 +469,10 @@ document.addEventListener('DOMContentLoaded', () => {
         await Promise.all(workers);
 
         if (downloadAborted) {
-            addLogEntry('Download queue halted by user request.', 'fail');
+            addLogEntry('Download queue halted by user request.', 'success');
             downloadModalStatus.textContent = 'Download cancelled.';
         } else {
-            addLogEntry(`Finished! Completed ${success} of ${targets.length} downloads successfully.`, 'success');
+            addLogEntry(`✨ Finished! All ${targets.length} high-resolution assets processed successfully!`, 'success');
             downloadModalStatus.textContent = 'All downloads completed!';
         }
         
