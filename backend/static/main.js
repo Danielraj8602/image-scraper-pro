@@ -259,7 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <i data-lucide="check"></i>
                 </div>
                 
-                <img src="${proxyUrl}" alt="${img.alt || 'Image'}" loading="lazy">
+                <img src="${proxyUrl}" alt="${img.alt || 'Image'}" loading="lazy" onerror="if(this.dataset.fallback!='1'){this.dataset.fallback='1';this.src='${img.url.replace(/'/g, "\\'")}';}">
                 
                 <div class="card-overlay">
                     <span class="badge ${isOriginal ? 'badge-orig' : 'badge-hq'}">
@@ -380,27 +380,56 @@ document.addEventListener('DOMContentLoaded', () => {
                     const proxyUrl = `/api/proxy_download?url=${encodeURIComponent(img.url)}`;
                     
                     const timeStart = Date.now();
-                    const response = await fetch(proxyUrl);
-                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    let response = null;
+                    let blob = null;
+
+                    try {
+                        response = await fetch(proxyUrl);
+                        if (response && response.ok) {
+                            blob = await response.blob();
+                        }
+                    } catch (e) {}
+
+                    if (!blob || blob.size === 0) {
+                        try {
+                            const directRes = await fetch(img.url, { mode: 'cors' });
+                            if (directRes && directRes.ok) {
+                                blob = await directRes.blob();
+                            }
+                        } catch (e) {}
+                    }
                     
-                    const blob = await response.blob();
-                    const duration = (Date.now() - timeStart) / 1000;
-                    downloadedBytes += blob.size;
-                    
-                    // Local browser download trigger
-                    const objUrl = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = objUrl;
                     let ext = img.url.split('.').pop().split('?')[0].toLowerCase();
                     if (!['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) ext = 'jpg';
-                    a.download = `${Math.random().toString(36).substring(2, 12)}.${ext}`;
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(objUrl);
-                    a.remove();
-                    
-                    success++;
-                    addLogEntry(`✔ File ${myIndex + 1} completed (${(blob.size / 1024).toFixed(1)} KB) in ${duration.toFixed(1)}s`, 'success');
+
+                    if (blob && blob.size > 0) {
+                        const duration = (Date.now() - timeStart) / 1000;
+                        downloadedBytes += blob.size;
+                        
+                        const objUrl = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = objUrl;
+                        a.download = `image_${myIndex + 1}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(objUrl);
+                        a.remove();
+                        
+                        success++;
+                        addLogEntry(`✔ File ${myIndex + 1} completed (${(blob.size / 1024).toFixed(1)} KB) in ${duration.toFixed(1)}s`, 'success');
+                    } else {
+                        // Ultimate Fallback: Direct Anchor Trigger
+                        const a = document.createElement('a');
+                        a.href = img.url;
+                        a.target = '_blank';
+                        a.download = `image_${myIndex + 1}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+
+                        success++;
+                        addLogEntry(`✔ File ${myIndex + 1} downloaded via direct link fallback`, 'success');
+                    }
                 } catch (err) {
                     console.error('Download failed for:', img.url, err);
                     addLogEntry(`✖ File ${myIndex + 1} failed: ${err.message}`, 'fail');

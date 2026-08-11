@@ -526,26 +526,44 @@ def api_proxy_download():
     if not url:
         return jsonify({'error': 'URL is required'}), 400
     
-    try:
-        # Fetch the image through the backend to bypass CORS
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Referer': url
+    parsed = urlparse(url)
+    origin_referer = f"{parsed.scheme}://{parsed.netloc}/" if parsed.netloc else "https://www.google.com/"
+    
+    headers_list = [
+        {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Referer': origin_referer,
+            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+        },
+        {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
         }
-        response = requests.get(url, headers=headers, timeout=15, stream=True)
-        response.raise_for_status()
-        
-        # Determine content type and suggested filename
+    ]
+    
+    response = None
+    for headers in headers_list:
+        try:
+            res = requests.get(url, headers=headers, timeout=12, stream=True)
+            if res.status_code == 200 and res.content:
+                response = res
+                break
+        except Exception as e:
+            print(f"Proxy attempt failed for {url}: {e}")
+            
+    if response and response.status_code == 200:
         content_type = response.headers.get('Content-Type', 'image/jpeg')
-        
+        if not content_type or 'text/html' in content_type:
+            content_type = 'image/jpeg'
+            
         return send_file(
             io.BytesIO(response.content),
             mimetype=content_type,
-            as_attachment=False # Browser will handle download with its own filename or our 'a' tag attribute
+            as_attachment=False
         )
-    except Exception as e:
-        print(f"Proxy download failed for {url}: {e}")
-        return jsonify({'error': str(e)}), 500
+
+    # Fallback to direct client redirect if proxy fetch returned non-200
+    return redirect(url, code=302)
 
 @app.route('/api/download', methods=['POST'])
 def api_download():
@@ -558,19 +576,24 @@ def api_download():
     
     def download_image(url_index_tuple):
         index, url = url_index_tuple
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                'Referer': url
-            }
-            response = requests.get(url, headers=headers, timeout=12)
-            if response.status_code == 200:
-                ext = url.split('.')[-1].split('?')[0].lower()
-                if not ext or len(ext) > 4 or not ext.isalnum():
-                    ext = 'jpg'
-                return index, response.content, ext
-        except Exception as e:
-            print(f"Parallel fetch failed for {url}: {e}")
+        parsed = urlparse(url)
+        origin_referer = f"{parsed.scheme}://{parsed.netloc}/" if parsed.netloc else "https://www.google.com/"
+        
+        headers_list = [
+            {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Referer': origin_referer},
+            {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}
+        ]
+        
+        for headers in headers_list:
+            try:
+                response = requests.get(url, headers=headers, timeout=10)
+                if response.status_code == 200 and response.content:
+                    ext = url.split('.')[-1].split('?')[0].lower()
+                    if not ext or len(ext) > 4 or not ext.isalnum():
+                        ext = 'jpg'
+                    return index, response.content, ext
+            except Exception as e:
+                print(f"Parallel fetch failed for {url}: {e}")
         return index, None, None
 
     indexed_urls = list(enumerate(urls))
