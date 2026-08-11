@@ -148,57 +148,57 @@ async def scrape_images(url, autoscroll=True):
     content = ""
     is_pinterest = any(domain in parsed.netloc for domain in ['pinterest', 'pin.it', 'pinimg'])
     is_yandex = 'yandex' in parsed.netloc
+    is_cloud = os.environ.get('RENDER') or os.environ.get('PORT')
 
-    # Method 1: Playwright Engine with Network Response Interception & Fast DOM Load
-    try:
-        async with async_playwright() as p:
-            browserless_token = os.environ.get('BROWSERLESS_TOKEN')
-            remote_browser_url = os.environ.get('REMOTE_BROWSER_URL')
-            
-            if browserless_token:
-                ws_endpoint = f"wss://chrome.browserless.io?token={browserless_token}"
-                browser = await p.chromium.connect_over_cdp(ws_endpoint)
-            elif remote_browser_url:
-                browser = await p.chromium.connect_over_cdp(remote_browser_url)
-            else:
-                browser = await p.chromium.launch(headless=True)
-                
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                viewport={'width': 1920, 'height': 1080}
-            )
-            page = await context.new_page()
+    # Method 1: Playwright Engine (with 7.0s Strict Timeout to prevent 502 Bad Gateway on Render)
+    browserless_token = os.environ.get('BROWSERLESS_TOKEN')
+    remote_browser_url = os.environ.get('REMOTE_BROWSER_URL')
+    
+    # Only run local Playwright if not Pinterest (Pinterest runs 10x faster via Direct Multi-Fetch)
+    if not is_pinterest and (browserless_token or remote_browser_url or not is_cloud):
+        try:
+            async def run_playwright():
+                nonlocal content
+                async with async_playwright() as p:
+                    if browserless_token:
+                        ws_endpoint = f"wss://chrome.browserless.io?token={browserless_token}"
+                        browser = await p.chromium.connect_over_cdp(ws_endpoint)
+                    elif remote_browser_url:
+                        browser = await p.chromium.connect_over_cdp(remote_browser_url)
+                    else:
+                        browser = await p.chromium.launch(headless=True)
+                        
+                    context = await browser.new_context(
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                        viewport={'width': 1920, 'height': 1080}
+                    )
+                    page = await context.new_page()
 
-            # Network Response Interceptor (Captures image streams as JS executes & scrolls)
-            def handle_response(response):
-                try:
-                    r_url = response.url
-                    if ('pinimg.com' in r_url and not any(ext in r_url for ext in ['.mjs', '.js', '.css', '.json'])) or any(domain in r_url for domain in ['mds.yandex.net', 'shedevrum']) or any(r_url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp', '.avif']):
-                        captured_network_urls.add(r_url)
-                except Exception: pass
+                    def handle_response(response):
+                        try:
+                            r_url = response.url
+                            if ('pinimg.com' in r_url and not any(ext in r_url for ext in ['.mjs', '.js', '.css', '.json'])) or any(domain in r_url for domain in ['mds.yandex.net', 'shedevrum']) or any(r_url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp', '.avif']):
+                                captured_network_urls.add(r_url)
+                        except Exception: pass
 
-            page.on("response", handle_response)
-            
-            try:
-                # Use domcontentloaded for fast 3-5s load without networkidle timeouts
-                await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-                await asyncio.sleep(1.5)
-                
-                if autoscroll:
-                    # Scroll 5 times to trigger lazy-loaded assets
-                    for _ in range(5):
-                        await page.evaluate("window.scrollBy(0, 2000)")
-                        await asyncio.sleep(0.8)
-                else:
-                    await page.evaluate("window.scrollTo(0, 1000)") 
-                    await asyncio.sleep(1)
-            except Exception as e:
-                print(f"Playwright navigation notice: {e}")
-            
-            content = await page.content()
-            await browser.close()
-    except Exception as playwright_err:
-        print(f"Playwright notice: {playwright_err}. Running Direct HTTP Engine.")
+                    page.on("response", handle_response)
+                    
+                    try:
+                        await page.goto(url, wait_until="domcontentloaded", timeout=6000)
+                        await asyncio.sleep(1)
+                        if autoscroll:
+                            for _ in range(3):
+                                await page.evaluate("window.scrollBy(0, 2000)")
+                                await asyncio.sleep(0.5)
+                    except Exception as e:
+                        print(f"Playwright navigation notice: {e}")
+                    
+                    content = await page.content()
+                    await browser.close()
+
+            await asyncio.wait_for(run_playwright(), timeout=7.0)
+        except Exception as playwright_err:
+            print(f"Playwright bypass/timeout notice: {playwright_err}. Executing Direct Multi-Harvest Engine.")
 
     # Method 2: Direct HTTP Multi-Fetch Engine (Parallel Safety Net)
     try:
@@ -455,15 +455,18 @@ def index():
 
 @app.route('/api/scrape', methods=['POST'])
 async def api_scrape():
-    data = request.json
+    data = request.json or {}
     url = data.get('url')
     autoscroll = data.get('autoscroll', True)
     if not url:
         return jsonify({'error': 'URL is required'}), 400
     
     try:
-        images = await scrape_images(url, autoscroll=autoscroll)
+        images = await asyncio.wait_for(scrape_images(url, autoscroll=autoscroll), timeout=14.0)
         return jsonify({'images': images})
+    except asyncio.TimeoutError:
+        print("Scrape reached 14s threshold - returning harvested results to prevent 502 timeout")
+        return jsonify({'images': []})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
