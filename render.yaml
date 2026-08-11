@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: image-scraper-pro
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /

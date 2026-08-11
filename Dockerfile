@@ -16,8 +16,12 @@ RUN playwright install chromium
 # Copy the rest of the application
 COPY . .
 
-# Expose the Flask development/production port
+# Set default port
+ENV PORT=5000
+
+# Expose port
 EXPOSE 5000
 
-# Start the application using a production WSGI server (Gunicorn)
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "backend.app:app"]
+# Start the application using Gunicorn reading dynamic PORT env var
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 2 --threads 4 backend.app:app"]
+
