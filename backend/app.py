@@ -522,13 +522,14 @@ def api_proxy_download():
     parsed = urlparse(clean_url)
     domain = parsed.netloc.lower()
     
-    referers = []
+    # Smart Referer selection based on domain
+    primary_referer = None
     if 'yandex' in domain or 'mds.yandex' in domain or 'shedevrum' in domain:
-        referers = ['https://yandex.com/images/', 'https://yandex.ru/images/', 'https://yandex.com/', '']
+        primary_referer = 'https://yandex.com/images/'
     elif 'pinimg' in domain or 'pinterest' in domain:
-        referers = ['https://www.pinterest.com/', 'https://pinterest.com/', '']
+        primary_referer = 'https://www.pinterest.com/'
     else:
-        referers = [f"{parsed.scheme}://{parsed.netloc}/", 'https://www.google.com/', '']
+        primary_referer = f"{parsed.scheme}://{parsed.netloc}/"
 
     # 3. Comprehensive CDN resolution fallback chain
     urls_to_try = [clean_url]
@@ -537,46 +538,32 @@ def api_proxy_download():
             urls_to_try.extend([
                 clean_url.replace('/orig', '/1200x900'),
                 clean_url.replace('/orig', '/1024x768'),
-                clean_url.replace('/orig', '/800x600'),
-                clean_url.replace('/orig', '/600x400'),
-                clean_url.replace('/orig', '/s1200x900'),
-                re.sub(r'/orig$', '', clean_url)
+                clean_url.replace('/orig', '/800x600')
             ])
-    elif 'pinimg.com' in clean_url:
-        if '/originals/' in clean_url:
-            urls_to_try.extend([
-                clean_url.replace('/originals/', '/736x/'),
-                clean_url.replace('/originals/', '/564x/'),
-                clean_url.replace('/originals/', '/236x/')
-            ])
-        else:
-            orig_url = re.sub(r'/(236x|474x|564x|736x|1200x)/', '/originals/', clean_url)
-            if orig_url not in urls_to_try:
-                urls_to_try.insert(0, orig_url)
+    elif 'pinimg.com' in clean_url and '/originals/' in clean_url:
+        urls_to_try.append(clean_url.replace('/originals/', '/736x/'))
 
     response_content = None
     content_type = 'image/jpeg'
 
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8'
+    }
+    if primary_referer:
+        headers['Referer'] = primary_referer
+
     for target_url in urls_to_try:
-        for ref in referers:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8'
-            }
-            if ref:
-                headers['Referer'] = ref
-            try:
-                res = http_session.get(target_url, headers=headers, timeout=4.0)
-                if res.status_code == 200 and res.content and len(res.content) > 100:
-                    response_content = res.content
-                    ct = res.headers.get('Content-Type', 'image/jpeg')
-                    if ct and 'text/html' not in ct:
-                        content_type = ct
-                    break
-            except Exception:
-                pass
-        if response_content:
-            break
+        try:
+            res = http_session.get(target_url, headers=headers, timeout=3.5)
+            if res.status_code == 200 and res.content and len(res.content) > 100:
+                response_content = res.content
+                ct = res.headers.get('Content-Type', 'image/jpeg')
+                if ct and 'text/html' not in ct:
+                    content_type = ct
+                break
+        except Exception:
+            pass
             
     if response_content:
         return send_file(

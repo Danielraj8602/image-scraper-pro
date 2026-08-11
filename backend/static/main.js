@@ -439,9 +439,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         a.remove();
                         
                         success++;
-                        addLogEntry(`✔ File ${myIndex + 1} downloaded successfully (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
+                        addLogEntry(`✔ File ${myIndex + 1}/${targets.length} downloaded (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
+                    } else {
+                        addLogEntry(`⚠ File ${myIndex + 1}/${targets.length} skipped (Unreachable link)`, 'warning');
                     }
                 } catch (err) {
+                    addLogEntry(`⚠ File ${myIndex + 1}/${targets.length} skipped (Download error)`, 'warning');
                     console.error('Download processing notice for:', img.url, err);
                 } finally {
                     completed++;
@@ -605,7 +608,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     }
                                     addLogEntry(`✔ Asset ${myIndex + 1}/${targets.length} compiled (${imgTest.naturalWidth}x${imgTest.naturalHeight}px)`, 'success');
                                 } else {
-                                    addLogEntry(`ℹ Asset ${myIndex + 1} skipped (${imgTest.naturalWidth}x${imgTest.naturalHeight}px < 400px requirement)`, 'warning');
+                                    addLogEntry(`ℹ Asset ${myIndex + 1}/${targets.length} skipped (${imgTest.naturalWidth}x${imgTest.naturalHeight}px < 400px requirement)`, 'warning');
                                 }
                                 URL.revokeObjectURL(blobUrl);
                                 res();
@@ -619,14 +622,19 @@ document.addEventListener('DOMContentLoaded', () => {
                                         folder.file(filename, blob);
                                     }
                                     addLogEntry(`✔ Asset ${myIndex + 1}/${targets.length} compiled (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
+                                } else {
+                                    addLogEntry(`⚠ Asset ${myIndex + 1}/${targets.length} skipped (Format unreadable)`, 'warning');
                                 }
                                 URL.revokeObjectURL(blobUrl);
                                 res();
                             };
                             imgTest.src = blobUrl;
                         });
+                    } else {
+                        addLogEntry(`⚠ Asset ${myIndex + 1}/${targets.length} skipped (Unreachable link)`, 'warning');
                     }
                 } catch (err) {
+                    addLogEntry(`⚠ Asset ${myIndex + 1}/${targets.length} skipped (Processing error)`, 'warning');
                     console.error('ZIP fetch notice:', img.url, err);
                 } finally {
                     completed++;
