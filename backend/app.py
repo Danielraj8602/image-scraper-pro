@@ -13,6 +13,7 @@ from flask import Flask, request, jsonify, send_file, send_from_directory, redir
 from flask_cors import CORS
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
+import urllib.parse
 from urllib.parse import unquote, urlparse, parse_qs, urljoin, urlunparse, urlencode
 
 # Configure Global High-Performance Connection Pool Session
@@ -258,9 +259,9 @@ async def scrape_images(url, autoscroll=True):
     seen_urls = set()
 
     def add_img(url, alt, w=0, h=0):
-        if not url or url.startswith('data:'): return
+        if not url or not url.startswith('http') or url.startswith('data:'): return
         if 'avatars.mds.yandex.net' in url and '/i?id=' in url: return
-        if any(bad in url.lower() for bad in ['.mjs', '.js', '.css', '.json', '_rs', '30x30', '60x60', '75x75', '136x136', '140x140', 'favicon', 'pixel.gif', 'spinner', 'icon', 'logo', '/clck/', '/jclck/', 'mc.yandex', 'an.yandex', 'counter.yandex']):
+        if any(bad in url.lower() for bad in ['.mjs', '.js', '.css', '.json', '_rs', '30x30', '60x60', '75x75', '136x136', '140x140', 'favicon', 'pixel.gif', 'spinner', 'icon', 'logo', '/clck/', '/jclck/', 'mc.yandex', 'an.yandex', 'counter.yandex', '/images/search']):
             return
             
         url = normalize_url(url)
@@ -510,14 +511,14 @@ def api_proxy_download():
         return jsonify({'error': 'URL is required'}), 400
     
     # 1. Unquote & Unescape HTML entities
-    clean_url = html.unescape(urllib.parse.unquote(raw_url))
+    clean_url = html.unescape(unquote(raw_url))
     clean_url = re.sub(r'[\)\}\;\'\"\&].*$', '', clean_url).strip()
     
     # 2. Extract embedded target image URL if inside tracking query params (e.g. /clck/ or data=)
     embedded_match = re.search(r'(https?%3A%2F%2F[^\s"\'\&]+|https?://[^\s"\'\&]+)', clean_url)
     if '/clck/' in clean_url or '/jclck/' in clean_url:
         if embedded_match and ('yandex' not in embedded_match.group(1) or 'mds.yandex' in embedded_match.group(1)):
-            clean_url = html.unescape(urllib.parse.unquote(embedded_match.group(1)))
+            clean_url = html.unescape(unquote(embedded_match.group(1)))
 
     parsed = urlparse(clean_url)
     domain = parsed.netloc.lower()

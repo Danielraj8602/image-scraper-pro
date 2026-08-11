@@ -294,6 +294,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
 
+            // Attach real-time dimension validator on load to purge < 400px low-res images
+            const cardImg = card.querySelector('img');
+            cardImg.addEventListener('load', function() {
+                if (this.naturalWidth > 0 && this.naturalHeight > 0) {
+                    if (this.naturalWidth < 400 || this.naturalHeight < 400) {
+                        card.remove();
+                        allImages = allImages.filter(item => item.url !== img.url);
+                        filteredImages = filteredImages.filter(item => item.url !== img.url);
+                        selectedUrls.delete(img.url);
+                        imageCount.textContent = `Found ${filteredImages.length} images (≥400px)`;
+                        updateSelectionUI();
+                    } else {
+                        // Store validated dimensions on object
+                        img.width = this.naturalWidth;
+                        img.height = this.naturalHeight;
+                    }
+                }
+            });
+
             // Event Listeners for Cards
             card.addEventListener('click', (e) => {
                 const target = e.target;
@@ -606,9 +625,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                         const filename = `asset_${myIndex + 1}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
                                         folder.file(filename, blob);
                                     }
-                                    addLogEntry(`✔ Asset ${myIndex + 1}/${targets.length} compiled (${imgTest.naturalWidth}x${imgTest.naturalHeight}px)`, 'success');
+                                    addLogEntry(`[Asset #${myIndex + 1}/${targets.length}] ✔ Compiled (${imgTest.naturalWidth}x${imgTest.naturalHeight}px)`, 'success');
                                 } else {
-                                    addLogEntry(`ℹ Asset ${myIndex + 1}/${targets.length} skipped (${imgTest.naturalWidth}x${imgTest.naturalHeight}px < 400px requirement)`, 'warning');
+                                    addLogEntry(`[Asset #${myIndex + 1}/${targets.length}] ℹ Skipped (${imgTest.naturalWidth}x${imgTest.naturalHeight}px < 400px requirement)`, 'warning');
                                 }
                                 URL.revokeObjectURL(blobUrl);
                                 res();
@@ -621,9 +640,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                         const filename = `asset_${myIndex + 1}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
                                         folder.file(filename, blob);
                                     }
-                                    addLogEntry(`✔ Asset ${myIndex + 1}/${targets.length} compiled (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
+                                    addLogEntry(`[Asset #${myIndex + 1}/${targets.length}] ✔ Compiled (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
                                 } else {
-                                    addLogEntry(`⚠ Asset ${myIndex + 1}/${targets.length} skipped (Format unreadable)`, 'warning');
+                                    addLogEntry(`[Asset #${myIndex + 1}/${targets.length}] ⚠ Skipped (Format unreadable)`, 'warning');
                                 }
                                 URL.revokeObjectURL(blobUrl);
                                 res();
@@ -631,10 +650,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             imgTest.src = blobUrl;
                         });
                     } else {
-                        addLogEntry(`⚠ Asset ${myIndex + 1}/${targets.length} skipped (Unreachable link)`, 'warning');
+                        addLogEntry(`[Asset #${myIndex + 1}/${targets.length}] ⚠ Skipped (Unreachable host link)`, 'warning');
                     }
                 } catch (err) {
-                    addLogEntry(`⚠ Asset ${myIndex + 1}/${targets.length} skipped (Processing error)`, 'warning');
+                    addLogEntry(`[Asset #${myIndex + 1}/${targets.length}] ⚠ Skipped (Processing error)`, 'warning');
                     console.error('ZIP fetch notice:', img.url, err);
                 } finally {
                     completed++;
