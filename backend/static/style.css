@@ -71,33 +71,35 @@
 }
 
 [data-theme="light"] {
-    /* Light Theme — CYBER FROST DIAMOND */
-    --bg-base: #F0F4FA;
-    --primary: #0077FF;
-    --primary-rgb: 0, 119, 255;
-    --primary-hover: #0066D6;
+    /* Light Theme — High Contrast Executive Pearl */
+    --bg-base: #F1F5F9;
+    --primary: #4F46E5;
+    --primary-rgb: 79, 70, 229;
+    --primary-hover: #4338CA;
     --primary-text: #FFFFFF;
-    --secondary: #E11D48;
-    --secondary-rgb: 225, 29, 72;
-    --secondary-hover: #BE123C;
+    --secondary: #D946EF;
+    --secondary-rgb: 217, 70, 239;
+    --secondary-hover: #C026D3;
     --secondary-text: #FFFFFF;
+    --accent-purple: #6D28D9;
+    --accent-cyan: #0284C7;
 
-    --glass-bg: rgba(255, 255, 255, 0.94);
-    --glass-border: rgba(0, 119, 255, 0.28);
-    --glass-border-hover: rgba(225, 29, 72, 0.6);
-    --glass-border-active: rgba(124, 58, 237, 0.85);
+    --glass-bg: #FFFFFF;
+    --glass-border: rgba(15, 23, 42, 0.14);
+    --glass-border-hover: rgba(79, 70, 229, 0.45);
+    --glass-border-active: rgba(217, 70, 239, 0.65);
     --text-main: #0F172A;
-    --text-dim: #64748B;
-    --text-accent: #0077FF;
-    --input-bg: rgba(255, 255, 255, 0.96);
-    --card-bg: rgba(255, 255, 255, 0.95);
-    --shadow-color: rgba(0, 119, 255, 0.18);
-    --card-hover-shadow: rgba(225, 29, 72, 0.35);
+    --text-dim: #475569;
+    --text-accent: #4F46E5;
+    --input-bg: #F8FAFC;
+    --card-bg: #FFFFFF;
+    --shadow-color: rgba(15, 23, 42, 0.08);
+    --card-hover-shadow: rgba(79, 70, 229, 0.2);
 
-    --blob-1: #0077FF;
-    --blob-2: #E11D48;
-    --blob-3: #7C3AED;
-    --blob-4: #06B6D4;
+    --blob-1: rgba(99, 102, 241, 0.18);
+    --blob-2: rgba(217, 70, 239, 0.16);
+    --blob-3: rgba(14, 165, 233, 0.18);
+    --blob-4: rgba(168, 85, 247, 0.16);
 }
 
 /* ==========================================================================
@@ -331,31 +333,40 @@ header {
 
 .hero-title {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     justify-content: center;
-    gap: 0.85rem;
+    gap: 0.6rem;
     font-family: var(--font-heading);
     margin-top: 0.2rem;
+    flex-wrap: wrap;
 }
 
-.title-tag {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 2.2rem;
-    font-weight: 800;
-    padding: 0.2rem 1.1rem;
-    background: linear-gradient(135deg, rgba(0, 255, 204, 0.18), rgba(112, 0, 255, 0.25));
-    border: 1.5px solid rgba(0, 255, 204, 0.65);
-    color: #00FFCC;
-    border-radius: 14px;
-    letter-spacing: 1px;
-    text-shadow: 0 0 15px rgba(0, 255, 204, 0.6);
-    box-shadow: 0 0 25px rgba(0, 255, 204, 0.3);
+.cursive-brand {
+    font-family: 'Great Vibes', cursive;
+    font-size: 5.2rem;
+    font-weight: 400;
+    line-height: 0.9;
+    background: linear-gradient(135deg, #FFD700 0%, #FF8C00 45%, #FF007A 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 18px rgba(255, 215, 0, 0.45));
+    transform: rotate(-3deg);
+    display: inline-block;
+    padding-right: 0.3rem;
+    transition: var(--spring-transition);
+}
+
+.hero-title:hover .cursive-brand {
+    transform: rotate(0deg) scale(1.06);
+    filter: drop-shadow(0 0 25px rgba(255, 215, 0, 0.7));
 }
 
 .title-gradient {
-    font-size: 3.8rem;
-    font-weight: 900;
-    letter-spacing: -2px;
+    font-family: 'Playfair Display', serif;
+    font-style: italic;
+    font-size: 3.6rem;
+    font-weight: 800;
+    letter-spacing: -1px;
     background: linear-gradient(135deg, #00FFCC 0%, #00F0FF 25%, #A855F7 60%, #FF007A 100%);
     background-size: 250% auto;
     animation: gradientShimmer 6s linear infinite alternate;
@@ -367,6 +378,33 @@ header {
 @keyframes gradientShimmer {
     0% { background-position: 0% 50%; }
     100% { background-position: 100% 50%; }
+}
+
+/* Light Mode High-Contrast Overrides */
+[data-theme="light"] .brand-badge-pill {
+    background: #F1F5F9;
+    border-color: rgba(79, 70, 229, 0.3);
+    color: #0F172A;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+}
+
+[data-theme="light"] .brand-badge-pill strong {
+    color: #4F46E5;
+}
+
+[data-theme="light"] .cursive-brand {
+    background: linear-gradient(135deg, #D97706 0%, #DC2626 50%, #7C3AED 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 2px 8px rgba(217, 119, 6, 0.35));
+}
+
+[data-theme="light"] .title-gradient {
+    background: linear-gradient(135deg, #0F172A 0%, #4F46E5 45%, #7C3AED 100%);
+    background-size: 250% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 2px 6px rgba(15, 23, 42, 0.15));
 }
 
 .subtitle {
