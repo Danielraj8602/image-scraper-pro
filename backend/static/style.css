@@ -2,37 +2,36 @@
    Design Tokens & Dynamic Theme Variables (Premium Cyber-SaaS)
    ========================================================================== */
 :root {
-    /* Dark Theme (Default) — HYPER REALM NEON GLASS */
-    --bg-base: #05040B;
-    --primary: #00FFCC;
-    --primary-rgb: 0, 255, 204;
-    --primary-hover: #00E6B8;
-    --primary-text: #020908;
-    --secondary: #FF007A;
-    --secondary-rgb: 255, 0, 122;
-    --secondary-hover: #E6006E;
+    /* Dark Theme (Default) — CYBER PHOENIX VOID */
+    --bg-base: #06050C;
+    --primary: #FF8C00;          /* Amber Funnel Orange */
+    --primary-rgb: 255, 140, 0;
+    --primary-hover: #FF7000;
+    --primary-text: #050409;
+    --secondary: #A855F7;        /* Electric Violet */
+    --secondary-rgb: 168, 85, 247;
+    --secondary-hover: #9333EA;
     --secondary-text: #FFFFFF;
-    --accent-purple: #7000FF;
-    --accent-cyan: #00F0FF;
+    --accent-cyan: #00F0FF;      /* Cyber Cyan */
 
-    --glass-bg: rgba(12, 10, 24, 0.85);
-    --glass-border: rgba(0, 255, 204, 0.35);
+    --glass-bg: rgba(14, 11, 25, 0.82);
+    --glass-border: rgba(255, 140, 0, 0.35);
     --glass-border-hover: rgba(0, 240, 255, 0.7);
-    --glass-border-active: rgba(255, 0, 122, 0.9);
+    --glass-border-active: rgba(168, 85, 247, 0.9);
     --text-main: #FFFFFF;
     --text-dim: #94A3B8;
-    --text-accent: #00FFCC;
+    --text-accent: #FF8C00;
     --input-bg: rgba(18, 15, 36, 0.85);
     --card-bg: rgba(18, 15, 36, 0.92);
-    --shadow-color: rgba(0, 255, 204, 0.25);
-    --card-hover-shadow: rgba(255, 0, 122, 0.45);
+    --shadow-color: rgba(255, 140, 0, 0.25);
+    --card-hover-shadow: rgba(168, 85, 247, 0.45);
 
-    --blob-1: #00FFCC;
-    --blob-2: #FF007A;
-    --blob-3: #7000FF;
-    --blob-4: #00F0FF;
+    --blob-1: #FF8C00;
+    --blob-2: #A855F7;
+    --blob-3: #00F0FF;
+    --blob-4: #EC4899;
 
-    --font-heading: 'Outfit', 'Space Grotesk', sans-serif;
+    --font-heading: 'Syne', 'Outfit', sans-serif;
     --font-body: 'Plus Jakarta Sans', sans-serif;
 
     --spring-transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -40,66 +39,64 @@
 }
 
 [data-theme="dark"] {
-    --bg-base: #05040B;
-    --primary: #00FFCC;
-    --primary-rgb: 0, 255, 204;
-    --primary-hover: #00E6B8;
-    --primary-text: #020908;
-    --secondary: #FF007A;
-    --secondary-rgb: 255, 0, 122;
-    --secondary-hover: #E6006E;
+    --bg-base: #06050C;
+    --primary: #FF8C00;
+    --primary-rgb: 255, 140, 0;
+    --primary-hover: #FF7000;
+    --primary-text: #050409;
+    --secondary: #A855F7;
+    --secondary-rgb: 168, 85, 247;
+    --secondary-hover: #9333EA;
     --secondary-text: #FFFFFF;
-    --accent-purple: #7000FF;
     --accent-cyan: #00F0FF;
 
-    --glass-bg: rgba(12, 10, 24, 0.85);
-    --glass-border: rgba(0, 255, 204, 0.35);
+    --glass-bg: rgba(14, 11, 25, 0.82);
+    --glass-border: rgba(255, 140, 0, 0.35);
     --glass-border-hover: rgba(0, 240, 255, 0.7);
-    --glass-border-active: rgba(255, 0, 122, 0.9);
+    --glass-border-active: rgba(168, 85, 247, 0.9);
     --text-main: #FFFFFF;
     --text-dim: #94A3B8;
-    --text-accent: #00FFCC;
+    --text-accent: #FF8C00;
     --input-bg: rgba(18, 15, 36, 0.85);
     --card-bg: rgba(18, 15, 36, 0.92);
-    --shadow-color: rgba(0, 255, 204, 0.25);
-    --card-hover-shadow: rgba(255, 0, 122, 0.45);
+    --shadow-color: rgba(255, 140, 0, 0.25);
+    --card-hover-shadow: rgba(168, 85, 247, 0.45);
 
-    --blob-1: #00FFCC;
-    --blob-2: #FF007A;
-    --blob-3: #7000FF;
-    --blob-4: #00F0FF;
+    --blob-1: #FF8C00;
+    --blob-2: #A855F7;
+    --blob-3: #00F0FF;
+    --blob-4: #EC4899;
 }
 
 [data-theme="light"] {
-    /* Light Theme — High Contrast Executive Pearl */
+    /* Light Theme — High Contrast Executive Sapphire */
     --bg-base: #F1F5F9;
-    --primary: #4F46E5;
-    --primary-rgb: 79, 70, 229;
-    --primary-hover: #4338CA;
+    --primary: #EA580C;
+    --primary-rgb: 234, 88, 12;
+    --primary-hover: #C2410C;
     --primary-text: #FFFFFF;
-    --secondary: #D946EF;
-    --secondary-rgb: 217, 70, 239;
-    --secondary-hover: #C026D3;
+    --secondary: #4F46E5;
+    --secondary-rgb: 79, 70, 229;
+    --secondary-hover: #4338CA;
     --secondary-text: #FFFFFF;
-    --accent-purple: #6D28D9;
     --accent-cyan: #0284C7;
 
     --glass-bg: #FFFFFF;
     --glass-border: rgba(15, 23, 42, 0.14);
-    --glass-border-hover: rgba(79, 70, 229, 0.45);
-    --glass-border-active: rgba(217, 70, 239, 0.65);
+    --glass-border-hover: rgba(234, 88, 12, 0.45);
+    --glass-border-active: rgba(79, 70, 229, 0.65);
     --text-main: #0F172A;
     --text-dim: #475569;
-    --text-accent: #4F46E5;
+    --text-accent: #EA580C;
     --input-bg: #F8FAFC;
     --card-bg: #FFFFFF;
     --shadow-color: rgba(15, 23, 42, 0.08);
-    --card-hover-shadow: rgba(79, 70, 229, 0.2);
+    --card-hover-shadow: rgba(234, 88, 12, 0.2);
 
-    --blob-1: rgba(99, 102, 241, 0.18);
-    --blob-2: rgba(217, 70, 239, 0.16);
+    --blob-1: rgba(234, 88, 12, 0.18);
+    --blob-2: rgba(79, 70, 229, 0.16);
     --blob-3: rgba(14, 165, 233, 0.18);
-    --blob-4: rgba(168, 85, 247, 0.16);
+    --blob-4: rgba(236, 72, 153, 0.16);
 }
 
 /* ==========================================================================
@@ -324,59 +321,81 @@ header {
     50% { transform: scale(1.4); opacity: 0.5; }
 }
 
-.hero-brand {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 0.7rem;
-}
-
-.hero-title {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.6rem;
-    font-family: var(--font-heading);
-    margin-top: 0.2rem;
-    flex-wrap: nowrap;
-}
-
-.cursive-brand {
-    font-family: 'Alex Brush', 'Great Vibes', cursive;
-    font-size: 4.0rem;
-    font-weight: 400;
-    line-height: 1;
-    background: linear-gradient(135deg, #FFD700 0%, #FF8C00 45%, #FF007A 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 0 16px rgba(255, 215, 0, 0.45));
+.logo-wrapper {
+    position: relative;
     display: inline-flex;
     align-items: center;
-    transform: translateY(-3px);
-    padding-right: 0.1rem;
-    transition: var(--spring-transition);
+    justify-content: center;
+    margin-bottom: 0.8rem;
 }
 
-.hero-title:hover .cursive-brand {
-    transform: translateY(-3px) scale(1.06);
-    filter: drop-shadow(0 0 22px rgba(255, 215, 0, 0.7));
+.logo-aura {
+    position: absolute;
+    width: 115px;
+    height: 115px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 140, 0, 0.4) 0%, rgba(168, 85, 247, 0.28) 50%, transparent 70%);
+    filter: blur(16px);
+    animation: auraPulse 4s infinite ease-in-out alternate;
+    pointer-events: none;
 }
 
-.title-gradient {
-    font-family: 'Playfair Display', serif;
-    font-style: italic;
+@keyframes auraPulse {
+    0% { transform: scale(0.88); opacity: 0.6; }
+    100% { transform: scale(1.25); opacity: 0.95; }
+}
+
+.brand-logo-img {
+    max-height: 85px;
+    width: auto;
+    max-width: 90%;
+    object-fit: contain;
+    position: relative;
+    z-index: 2;
+    filter: drop-shadow(0 0 18px rgba(255, 140, 0, 0.55)) drop-shadow(0 0 30px rgba(168, 85, 247, 0.45));
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.4s ease;
+}
+
+.logo-wrapper:hover .brand-logo-img {
+    transform: scale(1.08) rotate(-1deg);
+    filter: drop-shadow(0 0 26px rgba(255, 140, 0, 0.75)) drop-shadow(0 0 38px rgba(0, 240, 255, 0.65));
+}
+
+.brand-title {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    margin-top: 0.3rem;
+}
+
+.title-main {
+    font-family: 'Syne', sans-serif;
     font-size: 3.4rem;
     font-weight: 800;
-    line-height: 1;
     letter-spacing: -1px;
-    background: linear-gradient(135deg, #00FFCC 0%, #00F0FF 25%, #A855F7 60%, #FF007A 100%);
+    background: linear-gradient(135deg, #FF8C00 0%, #FF5500 30%, #A855F7 65%, #00F0FF 100%);
     background-size: 250% auto;
     animation: gradientShimmer 6s linear infinite alternate;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 0 22px rgba(0, 255, 204, 0.35));
-    display: inline-flex;
-    align-items: center;
+    filter: drop-shadow(0 0 20px rgba(255, 140, 0, 0.35));
+}
+
+.title-sub-tag {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.88rem;
+    font-weight: 800;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--primary);
+    background: rgba(255, 140, 0, 0.12);
+    border: 1px solid rgba(255, 140, 0, 0.4);
+    padding: 0.25rem 1.1rem;
+    border-radius: 50px;
+    box-shadow: 0 0 15px rgba(255, 140, 0, 0.2);
+    backdrop-filter: blur(8px);
 }
 
 @keyframes gradientShimmer {
@@ -387,28 +406,31 @@ header {
 /* Light Mode High-Contrast Overrides */
 [data-theme="light"] .brand-badge-pill {
     background: #F1F5F9;
-    border-color: rgba(79, 70, 229, 0.3);
+    border-color: rgba(234, 88, 12, 0.3);
     color: #0F172A;
     box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
 }
 
 [data-theme="light"] .brand-badge-pill strong {
-    color: #4F46E5;
+    color: #EA580C;
 }
 
-[data-theme="light"] .cursive-brand {
-    background: linear-gradient(135deg, #D97706 0%, #DC2626 50%, #7C3AED 100%);
+[data-theme="light"] .brand-title .title-main {
+    background: linear-gradient(135deg, #EA580C 0%, #C2410C 35%, #4F46E5 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 2px 8px rgba(217, 119, 6, 0.35));
+    filter: drop-shadow(0 2px 8px rgba(234, 88, 12, 0.25));
 }
 
-[data-theme="light"] .title-gradient {
-    background: linear-gradient(135deg, #0F172A 0%, #4F46E5 45%, #7C3AED 100%);
-    background-size: 250% auto;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 2px 6px rgba(15, 23, 42, 0.15));
+[data-theme="light"] .title-sub-tag {
+    background: #FFF7ED;
+    border-color: rgba(234, 88, 12, 0.4);
+    color: #EA580C;
+    box-shadow: 0 2px 10px rgba(234, 88, 12, 0.12);
+}
+
+[data-theme="light"] .brand-logo-img {
+    filter: drop-shadow(0 4px 14px rgba(234, 88, 12, 0.35));
 }
 
 .subtitle {
