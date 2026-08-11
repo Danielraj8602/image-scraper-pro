@@ -13,7 +13,7 @@ from flask import Flask, request, jsonify, send_file, send_from_directory, redir
 from flask_cors import CORS
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
-from urllib.parse import unquote, urlparse, parse_qs, urljoin, urlunparse, urlencode
+from urllib.parse import quote, unquote, urlparse, parse_qs, urljoin, urlunparse, urlencode
 
 # Configure Global High-Performance Connection Pool Session
 http_session = requests.Session()
@@ -142,7 +142,24 @@ async def auto_scroll(page, accumulation_set, max_scrolls=30):
         last_height = new_height
 
 async def scrape_images(url, autoscroll=True):
+    url = url.strip()
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+        
     parsed = urlparse(url)
+
+    # Automatically transform Yandex CBIR / Reverse Image Search URLs to full gallery URLs
+    qs_init = parse_qs(parsed.query)
+    if 'yandex' in parsed.netloc.lower() and ('rpt=imageview' in url or 'cbir' in url):
+        target_img_url = qs_init.get('url', [None])[0]
+        cbir_id = qs_init.get('cbir_id', [None])[0]
+        if target_img_url:
+            url = f"https://yandex.com/images/search?text=similar&url={quote(target_img_url, safe='')}"
+            parsed = urlparse(url)
+        elif cbir_id:
+            url = f"https://yandex.com/images/search?text=similar&cbir_id={quote(cbir_id, safe='')}"
+            parsed = urlparse(url)
+
     accumulated_data = set()
     captured_network_urls = set()
     content = ""
@@ -228,6 +245,17 @@ async def scrape_images(url, autoscroll=True):
                 if canonical_pin not in urls_to_fetch:
                     urls_to_fetch.append(canonical_pin)
         elif is_yandex and '/images/' in parsed.path:
+            # Reverse Image Search / CBIR URL handling
+            target_img_url = qs.get('url', [None])[0]
+            cbir_id = qs.get('cbir_id', [None])[0]
+
+            if target_img_url:
+                urls_to_fetch.append(f"https://yandex.com/images/search?text=similar&url={quote(target_img_url)}")
+                urls_to_fetch.append(f"https://yandex.ru/images/search?text=similar&url={quote(target_img_url)}")
+            if cbir_id:
+                urls_to_fetch.append(f"https://yandex.com/images/search?text=similar&cbir_id={quote(cbir_id)}")
+                urls_to_fetch.append(f"https://yandex.ru/images/search?text=similar&cbir_id={quote(cbir_id)}")
+
             for page_num in range(15):
                 new_qs = qs.copy()
                 new_qs['p'] = [str(page_num)]
