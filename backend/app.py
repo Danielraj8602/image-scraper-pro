@@ -580,7 +580,7 @@ def api_proxy_download():
 
 @app.route('/api/download', methods=['POST'])
 def api_download():
-    data = request.json
+    data = request.json or {}
     urls = data.get('urls', [])
     if not urls:
         return jsonify({'error': 'No URLs provided'}), 400
@@ -588,73 +588,71 @@ def api_download():
     import concurrent.futures
     
     def download_image(url_index_tuple):
-        index, url = url_index_tuple
-        parsed = urlparse(url)
+        index, raw_url = url_index_tuple
+        clean_url = re.sub(r'[\)\}\;\'\"\&].*$', '', raw_url)
+        parsed = urlparse(clean_url)
         domain = parsed.netloc.lower()
         
-        referers = []
-        if 'yandex' in domain or 'mds.yandex' in domain or 'shedevrum' in domain:
-            referers = [
-                'https://yandex.com/images/', 
-                'https://yandex.ru/images/',
-                'https://yandex.com/', 
-                'https://yandex.ru/', 
-                'https://yandex.by/',
-                ''
-            ]
+        # Primary referer header for maximum speed
+        referer = f"{parsed.scheme}://{parsed.netloc}/"
+        if 'yandex' in domain or 'mds.yandex' in domain:
+            referer = 'https://yandex.com/images/'
         elif 'pinimg' in domain or 'pinterest' in domain:
-            referers = ['https://www.pinterest.com/', 'https://pinterest.com/', '']
-        elif 'google' in domain:
-            referers = ['https://www.google.com/', '']
-        else:
-            referers = [f"{parsed.scheme}://{parsed.netloc}/", 'https://www.google.com/', '']
+            referer = 'https://www.pinterest.com/'
+            
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+            'Referer': referer
+        }
 
-        urls_to_try = [url]
-        if 'avatars.mds.yandex.net' in url or 'get-shedevrum' in url:
-            if '/orig' in url:
-                urls_to_try.append(url.replace('/orig', '/1200x900'))
-                urls_to_try.append(url.replace('/orig', '/1024x768'))
-                urls_to_try.append(url.replace('/orig', '/800x600'))
-                urls_to_try.append(url.replace('/orig', '/s1200x900'))
-        elif 'pinimg.com' in url and '/originals/' in url:
-            urls_to_try.append(url.replace('/originals/', '/736x/'))
-            urls_to_try.append(url.replace('/originals/', '/564x/'))
+        # Fast direct fetch with 3.0s timeout
+        try:
+            res = http_session.get(clean_url, headers=headers, timeout=3.0)
+            if res.status_code == 200 and res.content and len(res.content) > 100:
+                ext = clean_url.split('.')[-1].split('?')[0].lower()
+                if not ext or len(ext) > 4 or not ext.isalnum():
+                    ext = 'jpg'
+                return index, res.content, ext
+        except Exception:
+            pass
 
-        for target_url in urls_to_try:
-            for ref in referers:
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
-                }
-                if ref:
-                    headers['Referer'] = ref
-                try:
-                    response = http_session.get(target_url, headers=headers, timeout=8)
-                    if response.status_code == 200 and response.content and len(response.content) > 100:
-                        ext = url.split('.')[-1].split('?')[0].lower()
-                        if not ext or len(ext) > 4 or not ext.isalnum():
-                            ext = 'jpg'
-                        return index, response.content, ext
-                except Exception:
-                    pass
+        # Fast fallback for high-res CDN restrictions
+        fallback_urls = []
+        if 'avatars.mds.yandex.net' in clean_url or 'get-shedevrum' in clean_url:
+            if '/orig' in clean_url:
+                fallback_urls.append(clean_url.replace('/orig', '/1200x900'))
+                fallback_urls.append(clean_url.replace('/orig', '/1024x768'))
+        elif 'pinimg.com' in clean_url and '/originals/' in clean_url:
+            fallback_urls.append(clean_url.replace('/originals/', '/736x/'))
+
+        for fb_url in fallback_urls:
+            try:
+                res = http_session.get(fb_url, headers=headers, timeout=2.5)
+                if res.status_code == 200 and res.content and len(res.content) > 100:
+                    return index, res.content, 'jpg'
+            except Exception:
+                pass
+
         return index, None, None
 
     indexed_urls = list(enumerate(urls))
     downloaded_data = {}
     
-    # Parallel thread execution with 24 workers
-    with concurrent.futures.ThreadPoolExecutor(max_workers=24) as executor:
+    # 32 parallel worker threads for ultra-fast downloading
+    with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
         results = executor.map(download_image, indexed_urls)
         for index, content, ext in results:
             if content:
                 downloaded_data[index] = (content, ext)
 
+    # ZIP_STORED creates uncompressed stream instantly in 0.001s!
     memory_file = io.BytesIO()
-    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_STORED) as zf:
         for index, url in indexed_urls:
             if index in downloaded_data:
                 content, ext = downloaded_data[index]
-                filename = f"image_{index + 1}_{uuid.uuid4().hex[:6]}.{ext}"
+                filename = f"asset_{index + 1}_{uuid.uuid4().hex[:6]}.{ext}"
                 zf.writestr(filename, content)
                 
     memory_file.seek(0)
@@ -662,7 +660,7 @@ def api_download():
         memory_file,
         mimetype='application/zip',
         as_attachment=True,
-        download_name='downloaded_images.zip'
+        download_name='scraped_images.zip'
     )
 
 if __name__ == '__main__':

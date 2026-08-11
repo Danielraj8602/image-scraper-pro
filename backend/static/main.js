@@ -516,8 +516,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (targets.length === 0) return;
 
         cancelDownloadBtn.disabled = false;
-        showProgressModal('Compiling ZIP Archive', 'Sending request to parallel compilation server...');
-        addLogEntry('Parallel worker pool spinning up on backend...', 'success');
+        showProgressModal('Compiling ZIP Archive', 'Downloading assets via 32 parallel worker threads...');
+        addLogEntry('32 parallel worker threads downloading & archiving assets...', 'success');
 
         try {
             const startTime = Date.now();
