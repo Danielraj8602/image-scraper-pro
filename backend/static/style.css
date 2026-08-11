@@ -2,32 +2,32 @@
    Design Tokens & Dynamic Theme Variables (Premium Cyber-SaaS)
    ========================================================================== */
 :root {
-    /* Dark Theme (Default) — Cyber Emerald & Neon Aurora */
-    --bg-base: #04070A;
-    --primary: #00FF9D;
-    --primary-rgb: 0, 255, 157;
-    --primary-hover: #00E089;
-    --primary-text: #020905;
-    --secondary: #00F0FF;
-    --secondary-rgb: 0, 240, 255;
-    --secondary-hover: #00D8E6;
-    --secondary-text: #020905;
+    /* Dark Theme (Default) — MEDIA FIREWALL Cyber Theme */
+    --bg-base: #07060A;
+    --primary: #FF9900;
+    --primary-rgb: 255, 153, 0;
+    --primary-hover: #FF7700;
+    --primary-text: #050407;
+    --secondary: #8B5CF6;
+    --secondary-rgb: 139, 92, 246;
+    --secondary-hover: #7C3AED;
+    --secondary-text: #FFFFFF;
 
-    --glass-bg: rgba(6, 12, 18, 0.88);
-    --glass-border: rgba(0, 255, 157, 0.28);
-    --glass-border-hover: rgba(0, 255, 157, 0.6);
-    --glass-border-active: rgba(0, 240, 255, 0.8);
-    --text-main: #F1F8F5;
+    --glass-bg: rgba(14, 11, 20, 0.88);
+    --glass-border: rgba(255, 153, 0, 0.3);
+    --glass-border-hover: rgba(255, 153, 0, 0.65);
+    --glass-border-active: rgba(139, 92, 246, 0.85);
+    --text-main: #F8FAFC;
     --text-dim: #94A3B8;
-    --text-accent: #00FF9D;
-    --input-bg: rgba(10, 20, 28, 0.8);
-    --card-bg: rgba(10, 20, 28, 0.88);
-    --shadow-color: rgba(0, 255, 157, 0.2);
-    --card-hover-shadow: rgba(0, 255, 157, 0.38);
+    --text-accent: #FF9900;
+    --input-bg: rgba(20, 16, 30, 0.82);
+    --card-bg: rgba(20, 16, 30, 0.9);
+    --shadow-color: rgba(255, 153, 0, 0.22);
+    --card-hover-shadow: rgba(139, 92, 246, 0.4);
 
-    --blob-1: #00FF9D;
-    --blob-2: #00F0FF;
-    --blob-3: #7000FF;
+    --blob-1: #FF8800;
+    --blob-2: #8B5CF6;
+    --blob-3: #EC4899;
 
     --font-heading: 'Plus Jakarta Sans', 'Inter', sans-serif;
     --font-body: 'Plus Jakarta Sans', 'Inter', sans-serif;
@@ -37,60 +37,60 @@
 }
 
 [data-theme="dark"] {
-    --bg-base: #04070A;
-    --primary: #00FF9D;
-    --primary-rgb: 0, 255, 157;
-    --primary-hover: #00E089;
-    --primary-text: #020905;
-    --secondary: #00F0FF;
-    --secondary-rgb: 0, 240, 255;
-    --secondary-hover: #00D8E6;
-    --secondary-text: #020905;
+    --bg-base: #07060A;
+    --primary: #FF9900;
+    --primary-rgb: 255, 153, 0;
+    --primary-hover: #FF7700;
+    --primary-text: #050407;
+    --secondary: #8B5CF6;
+    --secondary-rgb: 139, 92, 246;
+    --secondary-hover: #7C3AED;
+    --secondary-text: #FFFFFF;
 
-    --glass-bg: rgba(6, 12, 18, 0.88);
-    --glass-border: rgba(0, 255, 157, 0.28);
-    --glass-border-hover: rgba(0, 255, 157, 0.6);
-    --glass-border-active: rgba(0, 240, 255, 0.8);
-    --text-main: #F1F8F5;
+    --glass-bg: rgba(14, 11, 20, 0.88);
+    --glass-border: rgba(255, 153, 0, 0.3);
+    --glass-border-hover: rgba(255, 153, 0, 0.65);
+    --glass-border-active: rgba(139, 92, 246, 0.85);
+    --text-main: #F8FAFC;
     --text-dim: #94A3B8;
-    --text-accent: #00FF9D;
-    --input-bg: rgba(10, 20, 28, 0.8);
-    --card-bg: rgba(10, 20, 28, 0.88);
-    --shadow-color: rgba(0, 255, 157, 0.2);
-    --card-hover-shadow: rgba(0, 255, 157, 0.38);
+    --text-accent: #FF9900;
+    --input-bg: rgba(20, 16, 30, 0.82);
+    --card-bg: rgba(20, 16, 30, 0.9);
+    --shadow-color: rgba(255, 153, 0, 0.22);
+    --card-hover-shadow: rgba(139, 92, 246, 0.4);
 
-    --blob-1: #00FF9D;
-    --blob-2: #00F0FF;
-    --blob-3: #7000FF;
+    --blob-1: #FF8800;
+    --blob-2: #8B5CF6;
+    --blob-3: #EC4899;
 }
 
 [data-theme="light"] {
-    /* Light Theme — Frost Cyber Aurora */
-    --bg-base: #F0F4F8;
-    --primary: #059669;
-    --primary-rgb: 5, 150, 105;
-    --primary-hover: #047857;
+    /* Light Theme — MEDIA FIREWALL Pure Light */
+    --bg-base: #F8FAFC;
+    --primary: #EA580C;
+    --primary-rgb: 234, 88, 12;
+    --primary-hover: #C2410C;
     --primary-text: #FFFFFF;
-    --secondary: #4F46E5;
-    --secondary-rgb: 79, 70, 229;
-    --secondary-hover: #4338CA;
+    --secondary: #7C3AED;
+    --secondary-rgb: 124, 58, 237;
+    --secondary-hover: #6D28D9;
     --secondary-text: #FFFFFF;
 
-    --glass-bg: rgba(255, 255, 255, 0.92);
-    --glass-border: rgba(5, 150, 105, 0.25);
-    --glass-border-hover: rgba(5, 150, 105, 0.55);
-    --glass-border-active: rgba(79, 70, 229, 0.8);
+    --glass-bg: rgba(255, 255, 255, 0.94);
+    --glass-border: rgba(234, 88, 12, 0.25);
+    --glass-border-hover: rgba(234, 88, 12, 0.55);
+    --glass-border-active: rgba(124, 58, 237, 0.8);
     --text-main: #0F172A;
     --text-dim: #64748B;
-    --text-accent: #059669;
-    --input-bg: rgba(255, 255, 255, 0.95);
-    --card-bg: rgba(255, 255, 255, 0.94);
-    --shadow-color: rgba(5, 150, 105, 0.15);
-    --card-hover-shadow: rgba(5, 150, 105, 0.3);
+    --text-accent: #EA580C;
+    --input-bg: rgba(255, 255, 255, 0.96);
+    --card-bg: rgba(255, 255, 255, 0.95);
+    --shadow-color: rgba(234, 88, 12, 0.15);
+    --card-hover-shadow: rgba(124, 58, 237, 0.28);
 
-    --blob-1: #10B981;
-    --blob-2: #6366F1;
-    --blob-3: #F43F5E;
+    --blob-1: #F97316;
+    --blob-2: #A855F7;
+    --blob-3: #3B82F6;
 }
 
 /* ==========================================================================
@@ -309,35 +309,26 @@ header {
     margin-bottom: 0.85rem;
 }
 
-.logo-icon-wrapper {
-    width: 54px;
-    height: 54px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.4s ease;
+.media-firewall-logo {
+    max-height: 80px;
+    width: auto;
+    max-width: 90%;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 22px rgba(255, 153, 0, 0.4)) drop-shadow(0 0 14px rgba(139, 92, 246, 0.45));
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.4s ease;
 }
 
-.logo:hover .logo-icon-wrapper {
-    transform: scale(1.12) rotate(6deg);
+.logo:hover .media-firewall-logo {
+    transform: scale(1.06);
+    filter: drop-shadow(0 8px 32px rgba(255, 153, 0, 0.6)) drop-shadow(0 0 20px rgba(139, 92, 246, 0.65));
 }
 
-.mfw-logo-svg {
-    width: 100%;
-    height: 100%;
-}
-
-.logo i {
-    width: 48px;
-    height: 48px;
-    color: var(--primary);
-    stroke-width: 2.2px;
-    filter: drop-shadow(0 0 12px rgba(var(--primary-rgb), 0.5));
-    transition: color 0.4s ease, filter 0.4s ease;
-}
-
-[data-theme="light"] .logo i {
-    filter: drop-shadow(0 4px 12px rgba(5, 150, 105, 0.35));
+.footer-logo-img {
+    height: 24px;
+    width: auto;
+    vertical-align: middle;
+    margin-right: 8px;
+    filter: drop-shadow(0 2px 8px rgba(255, 153, 0, 0.4));
 }
 
 h1 {
