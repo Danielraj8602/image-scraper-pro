@@ -2,32 +2,32 @@
    Design Tokens & Dynamic Theme Variables (Premium Cyber-SaaS)
    ========================================================================== */
 :root {
-    /* Dark Theme (Default) — Luxury Editorial: Burgundy Wine & Soft Cream */
-    --bg-base: #F8F1E7;
-    --primary: #5B0F18;
-    --primary-rgb: 91, 15, 24;
-    --primary-hover: #450a10;
-    --primary-text: #F8F1E7;
-    --secondary: #5B0F18;
-    --secondary-rgb: 91, 15, 24;
-    --secondary-hover: #450a10;
-    --secondary-text: #F8F1E7;
+    /* Dark Theme (Default) — Cyber Obsidian & Vibrant Violet Glow */
+    --bg-base: #0B0D14;
+    --primary: #6366F1;
+    --primary-rgb: 99, 102, 241;
+    --primary-hover: #4F46E5;
+    --primary-text: #FFFFFF;
+    --secondary: #EC4899;
+    --secondary-rgb: 236, 72, 153;
+    --secondary-hover: #DB2777;
+    --secondary-text: #FFFFFF;
 
-    --glass-bg: rgba(248, 241, 231, 0.75);
-    --glass-border: rgba(91, 15, 24, 0.22);
-    --glass-border-hover: rgba(91, 15, 24, 0.4);
-    --glass-border-active: rgba(91, 15, 24, 0.6);
-    --text-main: #5B0F18;
-    --text-dim: #78353f;
-    --text-accent: #5B0F18;
-    --input-bg: rgba(255, 255, 255, 0.65);
-    --card-bg: rgba(255, 255, 255, 0.55);
-    --shadow-color: rgba(91, 15, 24, 0.08);
-    --card-hover-shadow: rgba(91, 15, 24, 0.18);
+    --glass-bg: rgba(15, 18, 28, 0.78);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-border-hover: rgba(99, 102, 241, 0.4);
+    --glass-border-active: rgba(99, 102, 241, 0.6);
+    --text-main: #F9FAFB;
+    --text-dim: #9CA3AF;
+    --text-accent: #818CF8;
+    --input-bg: rgba(23, 27, 40, 0.75);
+    --card-bg: rgba(20, 24, 36, 0.85);
+    --shadow-color: rgba(0, 0, 0, 0.4);
+    --card-hover-shadow: rgba(99, 102, 241, 0.28);
 
-    --blob-1: #5B0F18;
-    --blob-2: #F8F1E7;
-    --blob-3: #e6dac9;
+    --blob-1: #4F46E5;
+    --blob-2: #831843;
+    --blob-3: #1E1B4B;
 
     --font-heading: 'Inter', sans-serif;
     --font-body: 'Inter', sans-serif;
@@ -36,33 +36,61 @@
     --smooth-transition: all 0.3s ease;
 }
 
+[data-theme="dark"] {
+    --bg-base: #0B0D14;
+    --primary: #6366F1;
+    --primary-rgb: 99, 102, 241;
+    --primary-hover: #4F46E5;
+    --primary-text: #FFFFFF;
+    --secondary: #EC4899;
+    --secondary-rgb: 236, 72, 153;
+    --secondary-hover: #DB2777;
+    --secondary-text: #FFFFFF;
+
+    --glass-bg: rgba(15, 18, 28, 0.78);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-border-hover: rgba(99, 102, 241, 0.4);
+    --glass-border-active: rgba(99, 102, 241, 0.6);
+    --text-main: #F9FAFB;
+    --text-dim: #9CA3AF;
+    --text-accent: #818CF8;
+    --input-bg: rgba(23, 27, 40, 0.75);
+    --card-bg: rgba(20, 24, 36, 0.85);
+    --shadow-color: rgba(0, 0, 0, 0.4);
+    --card-hover-shadow: rgba(99, 102, 241, 0.28);
+
+    --blob-1: #4F46E5;
+    --blob-2: #831843;
+    --blob-3: #1E1B4B;
+}
+
 [data-theme="light"] {
-    /* Light Theme — Stealth Neon: Neon Green & Deep Black */
-    --bg-base: #0B0B0B;
-    --primary: #39FF14;
-    --primary-rgb: 57, 255, 20;
-    --primary-hover: #2ee610;
-    --primary-text: #0B0B0B;
-    --secondary: #7D39EB;
-    --secondary-rgb: 125, 57, 235;
-    --secondary-hover: #601bc7;
-    --secondary-text: #ffffff;
+    /* Light Theme — Luxury Burgundy Wine & Soft Cream */
+    --bg-base: #FBF5F1;
+    --primary: #5B0F18;
+    --primary-rgb: 91, 15, 24;
+    --primary-hover: #450A10;
+    --primary-text: #FBF5F1;
+    --secondary: #800A1D;
+    --secondary-rgb: 128, 10, 29;
+    --secondary-hover: #630514;
+    --secondary-text: #FFFFFF;
 
-    --glass-bg: rgba(11, 11, 11, 0.72);
-    --glass-border: rgba(57, 255, 20, 0.16);
-    --glass-border-hover: rgba(57, 255, 20, 0.32);
-    --glass-border-active: rgba(57, 255, 20, 0.5);
-    --text-main: #f3f4f6;
-    --text-dim: #9ca3af;
-    --text-accent: #39FF14;
-    --input-bg: rgba(0, 0, 0, 0.65);
-    --card-bg: rgba(15, 15, 15, 0.85);
-    --shadow-color: rgba(57, 255, 20, 0.15);
-    --card-hover-shadow: rgba(57, 255, 20, 0.22);
+    --glass-bg: rgba(251, 245, 241, 0.82);
+    --glass-border: rgba(91, 15, 24, 0.2);
+    --glass-border-hover: rgba(91, 15, 24, 0.45);
+    --glass-border-active: rgba(91, 15, 24, 0.7);
+    --text-main: #3A080F;
+    --text-dim: #78353F;
+    --text-accent: #5B0F18;
+    --input-bg: rgba(255, 255, 255, 0.75);
+    --card-bg: rgba(255, 255, 255, 0.65);
+    --shadow-color: rgba(91, 15, 24, 0.1);
+    --card-hover-shadow: rgba(91, 15, 24, 0.22);
 
-    --blob-1: #39FF14;
-    --blob-2: #051f02;
-    --blob-3: #0b0b0b;
+    --blob-1: #5B0F18;
+    --blob-2: #FBF5F1;
+    --blob-3: #EBD9CE;
 }
 
 /* ==========================================================================
@@ -265,7 +293,7 @@ header {
 }
 
 [data-theme="light"] .logo i {
-    filter: drop-shadow(0 4px 10px rgba(125, 57, 235, 0.25));
+    filter: drop-shadow(0 4px 12px rgba(91, 15, 24, 0.35));
 }
 
 h1 {
