@@ -537,32 +537,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 try {
                     downloadModalStatus.textContent = `Downloading asset ${completed + 1} of ${targets.length}...`;
-                    const proxyUrl = `/api/proxy_download?url=${encodeURIComponent(img.url)}`;
+                    let cleanUrl = img.url.replace(/[\)\}\;\'\"\&].*$/, '').trim();
+                    const proxyUrl = `/api/proxy_download?url=${encodeURIComponent(cleanUrl)}`;
                     
                     let blob = null;
 
-                    // 1. Direct fetch attempt
+                    // 1. Direct CORS fetch attempt
                     try {
-                        const directRes = await fetch(img.url, { mode: 'cors', redirect: 'follow' });
+                        const directRes = await fetch(cleanUrl, { mode: 'cors', redirect: 'follow' });
                         if (directRes && directRes.ok) {
                             blob = await directRes.blob();
                         }
                     } catch (e) {}
 
-                    // 2. Proxy fetch attempt fallback
+                    // 2. High-speed backend proxy fetch attempt
                     if (!blob || blob.size === 0) {
-                        try {
-                            const proxyRes = await fetch(proxyUrl, { redirect: 'follow' });
-                            if (proxyRes && proxyRes.ok) {
-                                blob = await proxyRes.blob();
-                            }
-                        } catch (e) {}
+                        for (let attempt = 0; attempt < 2; attempt++) {
+                            try {
+                                const proxyRes = await fetch(proxyUrl, { redirect: 'follow' });
+                                if (proxyRes && proxyRes.ok) {
+                                    blob = await proxyRes.blob();
+                                    if (blob && blob.size > 0) break;
+                                }
+                            } catch (e) {}
+                            if (attempt === 0) await new Promise(r => setTimeout(r, 150));
+                        }
                     }
 
-                    let ext = img.url.split('.').pop().split('?')[0].toLowerCase();
+                    let ext = cleanUrl.split('.').pop().split('?')[0].toLowerCase();
                     if (!['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext)) ext = 'jpg';
 
-                    if (blob && blob.size > 0) {
+                    if (blob && blob.size > 100) {
                         downloadedBytes += blob.size;
                         successCount++;
                         
@@ -570,9 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const filename = `asset_${myIndex + 1}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
                             folder.file(filename, blob);
                         }
-                        addLogEntry(`✔ Asset ${myIndex + 1}/${targets.length} fetched (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
-                    } else {
-                        addLogEntry(`⚠ Asset ${myIndex + 1} skipped (unreachable)`, 'fail');
+                        addLogEntry(`✔ Asset ${myIndex + 1}/${targets.length} compiled (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
                     }
                 } catch (err) {
                     console.error('ZIP fetch notice:', img.url, err);

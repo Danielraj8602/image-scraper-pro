@@ -260,11 +260,11 @@ async def scrape_images(url, autoscroll=True):
     def add_img(url, alt, w=0, h=0):
         if not url or url.startswith('data:'): return
         if 'avatars.mds.yandex.net' in url and '/i?id=' in url: return
-        if any(bad in url.lower() for bad in ['.mjs', '.js', '.css', '.json', '_rs', '30x30', '60x60', '75x75', '136x136', '140x140', 'favicon', 'pixel.gif', 'spinner', 'icon', 'logo']):
+        if any(bad in url.lower() for bad in ['.mjs', '.js', '.css', '.json', '_rs', '30x30', '60x60', '75x75', '136x136', '140x140', 'favicon', 'pixel.gif', 'spinner', 'icon', 'logo', '/clck/', '/jclck/', 'mc.yandex', 'an.yandex', 'counter.yandex']):
             return
             
         url = normalize_url(url)
-        url = re.sub(r'[\)\}\;\'\"].*$', '', url)
+        url = re.sub(r'[\)\}\;\'\"\&].*$', '', url)
         
         try:
             w_val = int(w) if w and w != 'Original' else 0
@@ -501,47 +501,52 @@ async def api_scrape():
 
 @app.route('/api/proxy_download', methods=['GET'])
 def api_proxy_download():
-    url = request.args.get('url')
-    if not url:
+    raw_url = request.args.get('url')
+    if not raw_url:
         return jsonify({'error': 'URL is required'}), 400
     
-    parsed = urlparse(url)
+    # 1. Unquote & Unescape HTML entities
+    clean_url = html.unescape(urllib.parse.unquote(raw_url))
+    clean_url = re.sub(r'[\)\}\;\'\"\&].*$', '', clean_url).strip()
+    
+    # 2. Extract embedded target image URL if inside tracking query params (e.g. /clck/ or data=)
+    embedded_match = re.search(r'(https?%3A%2F%2F[^\s"\'\&]+|https?://[^\s"\'\&]+)', clean_url)
+    if '/clck/' in clean_url or '/jclck/' in clean_url:
+        if embedded_match and ('yandex' not in embedded_match.group(1) or 'mds.yandex' in embedded_match.group(1)):
+            clean_url = html.unescape(urllib.parse.unquote(embedded_match.group(1)))
+
+    parsed = urlparse(clean_url)
     domain = parsed.netloc.lower()
     
-    # Domain-specific referer headers for Yandex, Pinterest, Google, etc.
     referers = []
     if 'yandex' in domain or 'mds.yandex' in domain or 'shedevrum' in domain:
-        referers = [
-            'https://yandex.com/images/', 
-            'https://yandex.ru/images/',
-            'https://yandex.com/', 
-            'https://yandex.ru/', 
-            'https://yandex.by/',
-            'https://yandex.kz/',
-            ''
-        ]
+        referers = ['https://yandex.com/images/', 'https://yandex.ru/images/', 'https://yandex.com/', '']
     elif 'pinimg' in domain or 'pinterest' in domain:
         referers = ['https://www.pinterest.com/', 'https://pinterest.com/', '']
-    elif 'google' in domain:
-        referers = ['https://www.google.com/', '']
     else:
         referers = [f"{parsed.scheme}://{parsed.netloc}/", 'https://www.google.com/', '']
 
-    # Resolution Fallback Chain: Try high-res alternatives if /orig is restricted on cloud IPs
-    urls_to_try = [url]
-    if 'avatars.mds.yandex.net' in url or 'get-shedevrum' in url:
-        if '/orig' in url:
-            urls_to_try.append(url.replace('/orig', '/1200x900'))
-            urls_to_try.append(url.replace('/orig', '/1024x768'))
-            urls_to_try.append(url.replace('/orig', '/800x600'))
-            urls_to_try.append(url.replace('/orig', '/s1200x900'))
-            urls_to_try.append(url.replace('/orig', '/600x400'))
-    elif 'pinimg.com' in url:
-        if '/originals/' in url:
-            urls_to_try.append(url.replace('/originals/', '/736x/'))
-            urls_to_try.append(url.replace('/originals/', '/564x/'))
+    # 3. Comprehensive CDN resolution fallback chain
+    urls_to_try = [clean_url]
+    if 'avatars.mds.yandex.net' in clean_url or 'get-shedevrum' in clean_url:
+        if '/orig' in clean_url:
+            urls_to_try.extend([
+                clean_url.replace('/orig', '/1200x900'),
+                clean_url.replace('/orig', '/1024x768'),
+                clean_url.replace('/orig', '/800x600'),
+                clean_url.replace('/orig', '/600x400'),
+                clean_url.replace('/orig', '/s1200x900'),
+                re.sub(r'/orig$', '', clean_url)
+            ])
+    elif 'pinimg.com' in clean_url:
+        if '/originals/' in clean_url:
+            urls_to_try.extend([
+                clean_url.replace('/originals/', '/736x/'),
+                clean_url.replace('/originals/', '/564x/'),
+                clean_url.replace('/originals/', '/236x/')
+            ])
         else:
-            orig_url = re.sub(r'/(236x|474x|564x|736x|1200x)/', '/originals/', url)
+            orig_url = re.sub(r'/(236x|474x|564x|736x|1200x)/', '/originals/', clean_url)
             if orig_url not in urls_to_try:
                 urls_to_try.insert(0, orig_url)
 
@@ -552,12 +557,12 @@ def api_proxy_download():
         for ref in referers:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+                'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8'
             }
             if ref:
                 headers['Referer'] = ref
             try:
-                res = http_session.get(target_url, headers=headers, timeout=8)
+                res = http_session.get(target_url, headers=headers, timeout=4.0)
                 if res.status_code == 200 and res.content and len(res.content) > 100:
                     response_content = res.content
                     ct = res.headers.get('Content-Type', 'image/jpeg')
