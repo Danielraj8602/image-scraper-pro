@@ -103,10 +103,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateThemeUI(theme) {
         if (theme === 'light') {
             themeToggleBtn.innerHTML = '<i data-lucide="moon"></i>';
-            themeToggleBtn.setAttribute('title', 'Switch to Dark Theme');
+            themeToggleBtn.setAttribute('title', 'Switch to Cyber Emerald Dark Theme');
         } else {
             themeToggleBtn.innerHTML = '<i data-lucide="sun"></i>';
-            themeToggleBtn.setAttribute('title', 'Switch to Cyber Frost Light Theme');
+            themeToggleBtn.setAttribute('title', 'Switch to Frost Cyber Aurora Light Theme');
         }
         lucide.createIcons();
     }
