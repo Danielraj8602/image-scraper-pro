@@ -333,39 +333,41 @@ header {
 
 .hero-title {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: center;
     gap: 0.6rem;
     font-family: var(--font-heading);
     margin-top: 0.2rem;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .cursive-brand {
-    font-family: 'Great Vibes', cursive;
-    font-size: 5.2rem;
+    font-family: 'Alex Brush', 'Great Vibes', cursive;
+    font-size: 4.0rem;
     font-weight: 400;
-    line-height: 0.9;
+    line-height: 1;
     background: linear-gradient(135deg, #FFD700 0%, #FF8C00 45%, #FF007A 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 0 18px rgba(255, 215, 0, 0.45));
-    transform: rotate(-3deg);
-    display: inline-block;
-    padding-right: 0.3rem;
+    filter: drop-shadow(0 0 16px rgba(255, 215, 0, 0.45));
+    display: inline-flex;
+    align-items: center;
+    transform: translateY(-3px);
+    padding-right: 0.1rem;
     transition: var(--spring-transition);
 }
 
 .hero-title:hover .cursive-brand {
-    transform: rotate(0deg) scale(1.06);
-    filter: drop-shadow(0 0 25px rgba(255, 215, 0, 0.7));
+    transform: translateY(-3px) scale(1.06);
+    filter: drop-shadow(0 0 22px rgba(255, 215, 0, 0.7));
 }
 
 .title-gradient {
     font-family: 'Playfair Display', serif;
     font-style: italic;
-    font-size: 3.6rem;
+    font-size: 3.4rem;
     font-weight: 800;
+    line-height: 1;
     letter-spacing: -1px;
     background: linear-gradient(135deg, #00FFCC 0%, #00F0FF 25%, #A855F7 60%, #FF007A 100%);
     background-size: 250% auto;
@@ -373,6 +375,8 @@ header {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     filter: drop-shadow(0 0 22px rgba(0, 255, 204, 0.35));
+    display: inline-flex;
+    align-items: center;
 }
 
 @keyframes gradientShimmer {
