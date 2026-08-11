@@ -142,8 +142,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url, autoscroll })
             });
-            const data = await response.json();
-            if (data.error) throw new Error(data.error);
+
+            const textResponse = await response.text();
+            let data;
+            try {
+                data = textResponse ? JSON.parse(textResponse) : {};
+            } catch (jsonErr) {
+                throw new Error(`Server returned invalid response (Status ${response.status})`);
+            }
+
+            if (!response.ok || data.error) {
+                throw new Error(data.error || `Failed to scrape target site (Status ${response.status})`);
+            }
+
+            if (!data.images || data.images.length === 0) {
+                throw new Error('No images found on the target URL. Please verify the link or try toggling Deep Harvester.');
+            }
 
             allImages = data.images;
             filterSelect.value = 'all';

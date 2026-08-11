@@ -185,29 +185,38 @@ async def scrape_images(url, autoscroll=True):
             
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
-                'Referer': referer
+                'Referer': referer,
+                'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'same-origin' if 'pinterest' in parsed.netloc or 'yandex' in parsed.netloc else 'cross-site',
+                'Upgrade-Insecure-Requests': '1'
             }
             
             qs = parse_qs(parsed.query)
             urls_to_fetch = []
             
             if 'yandex' in parsed.netloc and '/images/' in parsed.path:
-                # Generate 30 pages for Yandex search (p=0 to p=29) to harvest 500+ images
-                for page_num in range(30):
+                # Generate 15 pages for Yandex search (p=0 to p=14) to harvest 400+ images fast
+                for page_num in range(15):
                     new_qs = qs.copy()
                     new_qs['p'] = [str(page_num)]
                     new_query = urlencode(new_qs, doseq=True)
                     urls_to_fetch.append(urlunparse(parsed._replace(query=new_query)))
-            elif any(domain in parsed.netloc for domain in ['google', 'bing', 'yahoo', 'pinterest', 'unsplash', 'artstation', 'behance', 'reddit', 'flickr']):
-                # Universal multi-page search harvester
-                for p_num in range(1, 15):
+            elif ('google' in parsed.netloc or 'bing' in parsed.netloc or 'yahoo' in parsed.netloc) and ('search' in parsed.path or 'q' in qs):
+                # Search engine pagination
+                for p_num in range(1, 6):
                     new_qs = qs.copy()
                     new_qs['page'] = [str(p_num)]
                     new_qs['p'] = [str(p_num)]
                     new_qs['start'] = [str((p_num - 1) * 20)]
                     urls_to_fetch.append(urlunparse(parsed._replace(query=urlencode(new_qs, doseq=True))))
             else:
+                # Single Pinterest pin, board, gallery, or individual web page
                 urls_to_fetch = [url]
             
             async def fetch_page(page_url):
@@ -348,6 +357,16 @@ async def scrape_images(url, autoscroll=True):
                 add_img(ld_url, f"LD+JSON {ld_key}")
         except: pass
 
+    # Pinterest High-Resolution Harvester (Regex + Auto-Resolution Upgrade)
+    if 'pinterest' in parsed.netloc or 'pinimg.com' in content:
+        pinimg_matches = set(re.findall(r'https://i\.pinimg\.com/[^\s"\'\\>\)]+', content))
+        for p_url in pinimg_matches:
+            p_url_clean = re.sub(r'[\)\}\;\'\"].*$', '', p_url)
+            if not any(bad in p_url_clean for bad in ['_RS', '30x30', '60x60', '75x75', '136x136', '140x140']):
+                orig_url = re.sub(r'/(236x|474x|564x|736x|1200x)/', '/originals/', p_url_clean)
+                add_img(orig_url, 'Pinterest Original High-Res Asset')
+                add_img(p_url_clean, 'Pinterest Standard Asset')
+
     # Pinterest State Extractor (__PWS_DATA__)
     pws_data = soup.find('script', id='__PWS_DATA__')
     if pws_data and pws_data.string:
@@ -453,9 +472,14 @@ def api_proxy_download():
             urls_to_try.append(url.replace('/orig', '/800x600'))
             urls_to_try.append(url.replace('/orig', '/s1200x900'))
             urls_to_try.append(url.replace('/orig', '/600x400'))
-    elif 'pinimg.com' in url and '/originals/' in url:
-        urls_to_try.append(url.replace('/originals/', '/736x/'))
-        urls_to_try.append(url.replace('/originals/', '/564x/'))
+    elif 'pinimg.com' in url:
+        if '/originals/' in url:
+            urls_to_try.append(url.replace('/originals/', '/736x/'))
+            urls_to_try.append(url.replace('/originals/', '/564x/'))
+        else:
+            orig_url = re.sub(r'/(236x|474x|564x|736x|1200x)/', '/originals/', url)
+            if orig_url not in urls_to_try:
+                urls_to_try.insert(0, orig_url)
 
     response_content = None
     content_type = 'image/jpeg'
