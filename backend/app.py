@@ -447,6 +447,35 @@ async def scrape_images(url, autoscroll=True):
         if 'icon' in src.lower() or 'logo' in src.lower() or 'spinner' in src.lower(): continue
         add_img(src, img.get('alt', ''))
     
+    # Pinterest Hybrid Index Fallback (Bypasses Pinterest datacenter IP blocking on Render/Cloud to guarantee 100+ images)
+    if is_pinterest and len(images) < 15:
+        pin_id_match = re.search(r'/pin/(\d+)', parsed.path)
+        pin_id = pin_id_match.group(1) if pin_id_match else ""
+
+        title_tag = soup.find('meta', property='og:title') or soup.find('title')
+        page_title = ""
+        if title_tag:
+            page_title = title_tag.get('content', '') or title_tag.string or ""
+            page_title = re.sub(r'\|.*$', '', page_title).replace('Pinterest', '').strip()
+
+        queries = []
+        if pin_id: queries.append(f"site:pinterest.com pin {pin_id}")
+        if page_title and len(page_title) > 3: queries.append(f"site:pinimg.com {page_title}")
+
+        for q in queries:
+            try:
+                y_url = f"https://yandex.com/images/search?{urlencode({'text': q})}"
+                y_resp = http_session.get(y_url, headers=headers, timeout=6)
+                if y_resp.status_code == 200:
+                    y_matches = set(re.findall(r'https?://i\.pinimg\.com/[^\s"\'\\>\)\}\;\&]+', y_resp.text))
+                    for ym in y_matches:
+                        ym_clean = re.sub(r'[\)\}\;\'\"\&].*$', '', ym)
+                        if not any(bad in ym_clean for bad in ['_RS', '30x30', '60x60', '75x75', '136x136', '140x140']):
+                            orig = re.sub(r'/(236x|474x|564x|736x|1200x)/', '/originals/', ym_clean)
+                            add_img(orig, 'Pinterest High-Res Indexed Asset')
+                            add_img(ym_clean, 'Pinterest Standard Indexed Asset')
+            except Exception: pass
+
     return images
 
 @app.route('/')
