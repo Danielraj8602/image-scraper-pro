@@ -142,6 +142,7 @@ async def auto_scroll(page, accumulation_set, max_scrolls=30):
         last_height = new_height
 
 async def scrape_images(url, autoscroll=True):
+    parsed = urlparse(url)
     accumulated_data = set()
     content = ""
     
