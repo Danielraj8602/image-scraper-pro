@@ -506,111 +506,156 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ==========================================================================
-    // FAST SERVER-SIDE ZIP ENGINE WITH FETCH STREAM TELEMETRY
+    // LIGHTNING FAST CLIENT-SIDE ZIP ENGINE WITH JSZIP TELEMETRY
     // ==========================================================================
     downloadZipBtn.addEventListener('click', async () => {
         const targets = selectedUrls.size > 0 
-            ? filteredImages.filter(img => selectedUrls.has(img.url)).map(img => img.url)
-            : filteredImages.map(img => img.url);
+            ? filteredImages.filter(img => selectedUrls.has(img.url))
+            : filteredImages;
             
         if (targets.length === 0) return;
 
         cancelDownloadBtn.disabled = false;
-        showProgressModal('Compiling ZIP Archive', 'Downloading assets via 32 parallel worker threads...');
-        addLogEntry('32 parallel worker threads downloading & archiving assets...', 'success');
+        showProgressModal('Compiling ZIP Archive', `Initializing download for ${targets.length} assets...`);
+        addLogEntry(`Spawning 8 parallel download workers for ${targets.length} assets...`, 'success');
 
-        try {
-            const startTime = Date.now();
-            
-            const response = await fetch('/api/download', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ urls: targets })
+        const zip = typeof JSZip !== 'undefined' ? new JSZip() : null;
+        const folder = zip ? zip.folder("scraped_assets") : null;
+
+        const CONCURRENCY = 8;
+        let completed = 0;
+        let successCount = 0;
+        let downloadedBytes = 0;
+        let currentIndex = 0;
+        const startTime = Date.now();
+        const workers = [];
+
+        async function zipWorker() {
+            while (currentIndex < targets.length && !downloadAborted) {
+                const myIndex = currentIndex++;
+                const img = targets[myIndex];
+                
+                try {
+                    downloadModalStatus.textContent = `Downloading asset ${completed + 1} of ${targets.length}...`;
+                    const proxyUrl = `/api/proxy_download?url=${encodeURIComponent(img.url)}`;
+                    
+                    let blob = null;
+
+                    // 1. Direct fetch attempt
+                    try {
+                        const directRes = await fetch(img.url, { mode: 'cors', redirect: 'follow' });
+                        if (directRes && directRes.ok) {
+                            blob = await directRes.blob();
+                        }
+                    } catch (e) {}
+
+                    // 2. Proxy fetch attempt fallback
+                    if (!blob || blob.size === 0) {
+                        try {
+                            const proxyRes = await fetch(proxyUrl, { redirect: 'follow' });
+                            if (proxyRes && proxyRes.ok) {
+                                blob = await proxyRes.blob();
+                            }
+                        } catch (e) {}
+                    }
+
+                    let ext = img.url.split('.').pop().split('?')[0].toLowerCase();
+                    if (!['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext)) ext = 'jpg';
+
+                    if (blob && blob.size > 0) {
+                        downloadedBytes += blob.size;
+                        successCount++;
+                        
+                        if (folder) {
+                            const filename = `asset_${myIndex + 1}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+                            folder.file(filename, blob);
+                        }
+                        addLogEntry(`✔ Asset ${myIndex + 1}/${targets.length} fetched (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
+                    } else {
+                        addLogEntry(`⚠ Asset ${myIndex + 1} skipped (unreachable)`, 'fail');
+                    }
+                } catch (err) {
+                    console.error('ZIP fetch notice:', img.url, err);
+                } finally {
+                    completed++;
+                    
+                    // Live Telemetry Calculations
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    const speed = downloadedBytes / (elapsed || 1);
+                    
+                    let speedText = '0.0 MB/s';
+                    if (speed < 1024) speedText = `${speed.toFixed(0)} B/s`;
+                    else if (speed < 1024 * 1024) speedText = `${(speed / 1024).toFixed(1)} KB/s`;
+                    else speedText = `${(speed / (1024 * 1024)).toFixed(1)} MB/s`;
+
+                    let etaText = '--:--';
+                    if (completed > 0) {
+                        const avgTime = elapsed / completed;
+                        const remSecs = avgTime * (targets.length - completed);
+                        etaText = remSecs < 60 ? `${Math.ceil(remSecs)}s` : `${Math.floor(remSecs / 60)}m`;
+                    }
+
+                    const progressPercent = (completed / targets.length) * 85; // First 85% is fetching
+                    updateProgressStats(progressPercent, speedText, etaText);
+                }
+            }
+        }
+
+        // Spawn 8 parallel worker threads
+        const workerCount = Math.min(CONCURRENCY, targets.length);
+        for (let i = 0; i < workerCount; i++) {
+            workers.push(zipWorker());
+        }
+
+        await Promise.all(workers);
+
+        if (downloadAborted) {
+            addLogEntry('ZIP download halted by user.', 'fail');
+            downloadModalStatus.textContent = 'Cancelled.';
+        } else if (successCount === 0) {
+            addLogEntry('No asset files could be fetched for ZIP.', 'fail');
+            downloadModalStatus.textContent = 'ZIP creation failed.';
+        } else if (zip) {
+            downloadModalStatus.textContent = 'Finalizing ZIP archive...';
+            addLogEntry('Building .zip archive file...', 'success');
+            updateProgressStats(90, 'Packing...', 'Instant');
+
+            const zipBlob = await zip.generateAsync({ 
+                type: 'blob',
+                compression: 'STORE'
+            }, function updateCallback(metadata) {
+                const packPercent = 85 + (metadata.percent * 0.15);
+                updateProgressStats(packPercent, 'Packing...', 'Instant');
             });
 
-            if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
-            
-            addLogEntry('Backend parallel compilation complete. Streaming zip archive to browser...', 'success');
-            downloadModalStatus.textContent = 'Streaming ZIP archive...';
-            
-            const reader = response.body.getReader();
-            const contentLength = +response.headers.get('Content-Length') || 0;
-            
-            let receivedLength = 0;
-            let chunks = [];
-            
-            // Read streamed response body chunks
-            while (true) {
-                if (downloadAborted) {
-                    reader.cancel();
-                    throw new Error('Streaming cancelled by user');
-                }
-                
-                const { done, value } = await reader.read();
-                if (done) break;
-                
-                chunks.push(value);
-                receivedLength += value.length;
-                
-                const elapsed = (Date.now() - startTime) / 1000;
-                const speed = receivedLength / elapsed;
-                
-                // Speed format
-                let speedText = '0.0 MB/s';
-                if (speed < 1024 * 1024) speedText = `${(speed / 1024).toFixed(1)} KB/s`;
-                else speedText = `${(speed / (1024 * 1024)).toFixed(1)} MB/s`;
-
-                // Progress percentage (if Content-Length is provided)
-                let percent = 0;
-                let etaText = '--:--';
-                
-                if (contentLength) {
-                    percent = (receivedLength / contentLength) * 100;
-                    const remainingBytes = contentLength - receivedLength;
-                    const etaSecs = remainingBytes / speed;
-                    etaText = etaSecs < 60 ? `${Math.ceil(etaSecs)}s` : `${Math.floor(etaSecs / 60)}m`;
-                } else {
-                    // Fallback visual pulse progress
-                    percent = Math.min((receivedLength / (5 * 1024 * 1024)) * 100, 99); // Estimate progress up to 5MB
-                    etaText = 'Streaming';
-                }
-                
-                downloadModalStatus.textContent = `Received ${(receivedLength / (1024 * 1024)).toFixed(2)} MB...`;
-                updateProgressStats(percent, speedText, etaText);
-            }
-
-            // Reconstruct downloaded chunks into blob
-            const blob = new Blob(chunks, { type: 'application/zip' });
-            const objUrl = window.URL.createObjectURL(blob);
-            
+            const objUrl = window.URL.createObjectURL(zipBlob);
             const a = document.createElement('a');
             a.href = objUrl;
-            a.download = `scraper_assets_${Date.now().toString().slice(-6)}.zip`;
+            a.download = `scraped_assets_${Date.now().toString().slice(-6)}.zip`;
             document.body.appendChild(a);
             a.click();
-            window.URL.revokeObjectURL(objUrl);
-            a.remove();
             
-            addLogEntry(`✔ ZIP compiled and downloaded successfully (${(blob.size / (1024 * 1024)).toFixed(2)} MB)`, 'success');
-            downloadModalStatus.textContent = 'ZIP download completed!';
-            updateProgressStats(100, '0.0 B/s', 'Finished');
-        } catch (err) {
-            console.error('ZIP compilation download failed:', err);
-            addLogEntry(`✖ Archive creation failed: ${err.message}`, 'fail');
-            downloadModalStatus.textContent = downloadAborted ? 'ZIP compilation aborted.' : 'Error creating ZIP.';
-        } finally {
-            cancelDownloadBtn.textContent = 'Close Panel';
-            cancelDownloadBtn.className = 'btn-primary';
-            cancelDownloadBtn.disabled = false;
-            
-            const closeHandler = () => {
-                downloadModal.classList.remove('active');
-                cancelDownloadBtn.textContent = 'Cancel Download';
-                cancelDownloadBtn.className = 'btn-danger';
-                cancelDownloadBtn.removeEventListener('click', closeHandler);
-            };
-            cancelDownloadBtn.addEventListener('click', closeHandler);
+            setTimeout(() => {
+                window.URL.revokeObjectURL(objUrl);
+                a.remove();
+            }, 1000);
+
+            addLogEntry(`✨ ZIP created & downloaded successfully! (${(zipBlob.size / (1024 * 1024)).toFixed(2)} MB)`, 'success');
+            downloadModalStatus.textContent = 'ZIP Download Complete!';
+            updateProgressStats(100, 'Finished', 'Finished');
         }
+
+        cancelDownloadBtn.textContent = 'Close Panel';
+        cancelDownloadBtn.className = 'btn-primary';
+        cancelDownloadBtn.disabled = false;
+        
+        const closeHandler = () => {
+            downloadModal.classList.remove('active');
+            cancelDownloadBtn.textContent = 'Cancel Download';
+            cancelDownloadBtn.className = 'btn-danger';
+            cancelDownloadBtn.removeEventListener('click', closeHandler);
+        };
+        cancelDownloadBtn.addEventListener('click', closeHandler);
     });
 
     // ==========================================================================
