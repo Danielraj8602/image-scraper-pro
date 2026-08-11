@@ -182,23 +182,30 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyFilter() {
         const activeFilter = filterSelect.value;
 
+        // Base filter: Enforce minimum 400px dimension requirement
+        let baseList = allImages.filter(img => {
+            if (img.width !== 'Original' && typeof img.width === 'number' && img.width < 400) return false;
+            if (img.height !== 'Original' && typeof img.height === 'number' && img.height < 400) return false;
+            return true;
+        });
+
         if (activeFilter === 'all') {
-            filteredImages = allImages;
+            filteredImages = baseList;
         } else if (activeFilter === 'hd') {
-            filteredImages = allImages.filter(img =>
+            filteredImages = baseList.filter(img =>
                 (img.width !== 'Original' && img.width >= 1080) ||
                 (img.height !== 'Original' && img.height >= 1080) ||
                 img.alt === 'Highest Quality Asset' ||
                 img.alt === 'Search Source (Original)'
             );
         } else {
-            filteredImages = allImages.filter(img => {
+            filteredImages = baseList.filter(img => {
                 const ext = img.url.split('.').pop().split('?')[0].toLowerCase();
                 if (activeFilter === 'jpg') return ext === 'jpg' || ext === 'jpeg';
                 return ext === activeFilter;
             });
         }
-        imageCount.textContent = `Found ${filteredImages.length} images`;
+        imageCount.textContent = `Found ${filteredImages.length} images (≥400px)`;
         
         // Clean out selected URLs that are no longer in the filtered set
         const filteredUrlsSet = new Set(filteredImages.map(img => img.url));
@@ -568,14 +575,40 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext)) ext = 'jpg';
 
                     if (blob && blob.size > 100) {
-                        downloadedBytes += blob.size;
-                        successCount++;
-                        
-                        if (folder) {
-                            const filename = `asset_${myIndex + 1}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
-                            folder.file(filename, blob);
-                        }
-                        addLogEntry(`✔ Asset ${myIndex + 1}/${targets.length} compiled (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
+                        // Check natural image dimensions before adding to ZIP archive
+                        const imgTest = new Image();
+                        const blobUrl = URL.createObjectURL(blob);
+                        await new Promise((res) => {
+                            imgTest.onload = () => {
+                                if (imgTest.naturalWidth >= 400 && imgTest.naturalHeight >= 400) {
+                                    downloadedBytes += blob.size;
+                                    successCount++;
+                                    if (folder) {
+                                        const filename = `asset_${myIndex + 1}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+                                        folder.file(filename, blob);
+                                    }
+                                    addLogEntry(`✔ Asset ${myIndex + 1}/${targets.length} compiled (${imgTest.naturalWidth}x${imgTest.naturalHeight}px)`, 'success');
+                                } else {
+                                    addLogEntry(`ℹ Asset ${myIndex + 1} skipped (${imgTest.naturalWidth}x${imgTest.naturalHeight}px < 400px)`, 'warning');
+                                }
+                                URL.revokeObjectURL(blobUrl);
+                                res();
+                            };
+                            imgTest.onerror = () => {
+                                if (blob.size > 40 * 1024) {
+                                    downloadedBytes += blob.size;
+                                    successCount++;
+                                    if (folder) {
+                                        const filename = `asset_${myIndex + 1}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+                                        folder.file(filename, blob);
+                                    }
+                                    addLogEntry(`✔ Asset ${myIndex + 1}/${targets.length} compiled (${(blob.size / 1024).toFixed(1)} KB)`, 'success');
+                                }
+                                URL.revokeObjectURL(blobUrl);
+                                res();
+                            };
+                            imgTest.src = blobUrl;
+                        });
                     }
                 } catch (err) {
                     console.error('ZIP fetch notice:', img.url, err);
