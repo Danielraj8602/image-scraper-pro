@@ -144,87 +144,114 @@ async def auto_scroll(page, accumulation_set, max_scrolls=30):
 async def scrape_images(url, autoscroll=True):
     parsed = urlparse(url)
     accumulated_data = set()
+    captured_network_urls = set()
     content = ""
     is_pinterest = any(domain in parsed.netloc for domain in ['pinterest', 'pin.it', 'pinimg'])
+    is_yandex = 'yandex' in parsed.netloc
 
-    # Fast Direct HTTP Multi-Fetch Engine (Used for Pinterest & lightweight sites to guarantee <2s speed without 502 timeouts)
-    if is_pinterest or not os.environ.get('ENABLE_PLAYWRIGHT', ''):
-        try:
-            referer = f"{parsed.scheme}://{parsed.netloc}/"
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Referer': referer,
-                'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-                'Sec-Ch-Ua-Mobile': '?0',
-                'Sec-Ch-Ua-Platform': '"Windows"',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'same-origin',
-                'Upgrade-Insecure-Requests': '1'
-            }
-
-            qs = parse_qs(parsed.query)
-            urls_to_fetch = [url]
-
-            if is_pinterest:
-                # If URL is a visual search / crop / closeup pin, also fetch canonical pin page
-                pin_id_match = re.search(r'/pin/(\d+)', parsed.path)
-                if pin_id_match:
-                    pin_id = pin_id_match.group(1)
-                    canonical_pin = f"https://www.pinterest.com/pin/{pin_id}/"
-                    if canonical_pin not in urls_to_fetch:
-                        urls_to_fetch.append(canonical_pin)
-            elif 'yandex' in parsed.netloc and '/images/' in parsed.path:
-                for page_num in range(15):
-                    new_qs = qs.copy()
-                    new_qs['p'] = [str(page_num)]
-                    urls_to_fetch.append(urlunparse(parsed._replace(query=urlencode(new_qs, doseq=True))))
-            elif ('google' in parsed.netloc or 'bing' in parsed.netloc or 'yahoo' in parsed.netloc) and ('search' in parsed.path or 'q' in qs):
-                for p_num in range(1, 6):
-                    new_qs = qs.copy()
-                    new_qs['page'] = [str(p_num)]
-                    new_qs['p'] = [str(p_num)]
-                    new_qs['start'] = [str((p_num - 1) * 20)]
-                    urls_to_fetch.append(urlunparse(parsed._replace(query=urlencode(new_qs, doseq=True))))
-
-            async def fetch_page(page_url):
-                try:
-                    response = await asyncio.to_thread(http_session.get, page_url, headers=headers, timeout=8)
-                    return response.text if response.status_code == 200 else ""
-                except Exception:
-                    return ""
-
-            contents = await asyncio.gather(*(fetch_page(u) for u in urls_to_fetch))
-            content = "\n".join(contents)
-        except Exception:
-            content = ""
-    else:
-        # Fallback to Playwright for heavy non-Pinterest SPA apps if explicitly enabled
-        try:
-            async with async_playwright() as p:
-                browserless_token = os.environ.get('BROWSERLESS_TOKEN')
-                remote_browser_url = os.environ.get('REMOTE_BROWSER_URL')
+    # Method 1: Playwright Engine with Network Response Interception & Fast DOM Load
+    try:
+        async with async_playwright() as p:
+            browserless_token = os.environ.get('BROWSERLESS_TOKEN')
+            remote_browser_url = os.environ.get('REMOTE_BROWSER_URL')
+            
+            if browserless_token:
+                ws_endpoint = f"wss://chrome.browserless.io?token={browserless_token}"
+                browser = await p.chromium.connect_over_cdp(ws_endpoint)
+            elif remote_browser_url:
+                browser = await p.chromium.connect_over_cdp(remote_browser_url)
+            else:
+                browser = await p.chromium.launch(headless=True)
                 
-                if browserless_token:
-                    ws_endpoint = f"wss://chrome.browserless.io?token={browserless_token}"
-                    browser = await p.chromium.connect_over_cdp(ws_endpoint)
-                elif remote_browser_url:
-                    browser = await p.chromium.connect_over_cdp(remote_browser_url)
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                viewport={'width': 1920, 'height': 1080}
+            )
+            page = await context.new_page()
+
+            # Network Response Interceptor (Captures image streams as JS executes & scrolls)
+            def handle_response(response):
+                try:
+                    r_url = response.url
+                    if ('pinimg.com' in r_url and not any(ext in r_url for ext in ['.mjs', '.js', '.css', '.json'])) or any(domain in r_url for domain in ['mds.yandex.net', 'shedevrum']) or any(r_url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp', '.avif']):
+                        captured_network_urls.add(r_url)
+                except Exception: pass
+
+            page.on("response", handle_response)
+            
+            try:
+                # Use domcontentloaded for fast 3-5s load without networkidle timeouts
+                await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                await asyncio.sleep(1.5)
+                
+                if autoscroll:
+                    # Scroll 5 times to trigger lazy-loaded assets
+                    for _ in range(5):
+                        await page.evaluate("window.scrollBy(0, 2000)")
+                        await asyncio.sleep(0.8)
                 else:
-                    browser = await p.chromium.launch(headless=True)
-                    
-                context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-                )
-                page = await context.new_page()
-                await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                await asyncio.sleep(1)
-                content = await page.content()
-                await browser.close()
-        except Exception:
-            content = ""
+                    await page.evaluate("window.scrollTo(0, 1000)") 
+                    await asyncio.sleep(1)
+            except Exception as e:
+                print(f"Playwright navigation notice: {e}")
+            
+            content = await page.content()
+            await browser.close()
+    except Exception as playwright_err:
+        print(f"Playwright notice: {playwright_err}. Running Direct HTTP Engine.")
+
+    # Method 2: Direct HTTP Multi-Fetch Engine (Parallel Safety Net)
+    try:
+        referer = f"{parsed.scheme}://{parsed.netloc}/"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': referer,
+            'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
+            'Upgrade-Insecure-Requests': '1'
+        }
+        
+        qs = parse_qs(parsed.query)
+        urls_to_fetch = [url]
+        
+        if is_pinterest:
+            pin_id_match = re.search(r'/pin/(\d+)', parsed.path)
+            if pin_id_match:
+                pin_id = pin_id_match.group(1)
+                canonical_pin = f"https://www.pinterest.com/pin/{pin_id}/"
+                if canonical_pin not in urls_to_fetch:
+                    urls_to_fetch.append(canonical_pin)
+        elif is_yandex and '/images/' in parsed.path:
+            for page_num in range(15):
+                new_qs = qs.copy()
+                new_qs['p'] = [str(page_num)]
+                urls_to_fetch.append(urlunparse(parsed._replace(query=urlencode(new_qs, doseq=True))))
+        elif ('google' in parsed.netloc or 'bing' in parsed.netloc or 'yahoo' in parsed.netloc) and ('search' in parsed.path or 'q' in qs):
+            for p_num in range(1, 6):
+                new_qs = qs.copy()
+                new_qs['page'] = [str(p_num)]
+                new_qs['p'] = [str(p_num)]
+                new_qs['start'] = [str((p_num - 1) * 20)]
+                urls_to_fetch.append(urlunparse(parsed._replace(query=urlencode(new_qs, doseq=True))))
+        
+        async def fetch_page(page_url):
+            try:
+                response = await asyncio.to_thread(http_session.get, page_url, headers=headers, timeout=8)
+                return response.text if response.status_code == 200 else ""
+            except Exception:
+                return ""
+        
+        contents = await asyncio.gather(*(fetch_page(u) for u in urls_to_fetch))
+        http_content = "\n".join(contents)
+        content = (content + "\n" + http_content) if content else http_content
+    except Exception:
+        pass
 
     soup = BeautifulSoup(content, 'html.parser')
     images = []
@@ -233,10 +260,11 @@ async def scrape_images(url, autoscroll=True):
     def add_img(url, alt, w=0, h=0):
         if not url or url.startswith('data:'): return
         if 'avatars.mds.yandex.net' in url and '/i?id=' in url: return
-        if url.split('?')[0].endswith('.svg') or any(k in url.lower() for k in ['favicon', '/tracker', 'pixel.gif', 'doubleclick', 'google-analytics', 'yandex.ru/metrika', 'logo', 'spinner', 'icon']):
+        if any(bad in url.lower() for bad in ['.mjs', '.js', '.css', '.json', '_rs', '30x30', '60x60', '75x75', '136x136', '140x140', 'favicon', 'pixel.gif', 'spinner', 'icon', 'logo']):
             return
             
         url = normalize_url(url)
+        url = re.sub(r'[\)\}\;\'\"].*$', '', url)
         
         try:
             w_val = int(w) if w and w != 'Original' else 0
@@ -254,6 +282,15 @@ async def scrape_images(url, autoscroll=True):
             'height': h_val or 'Original',
             'area': w_val * h_val
         })
+
+    # 1. Process Network-Captured Requests
+    for net_url in captured_network_urls:
+        if 'pinimg.com' in net_url:
+            orig = re.sub(r'/(236x|474x|564x|736x|1200x)/', '/originals/', net_url)
+            add_img(orig, 'Pinterest Captured High-Res Asset')
+            add_img(net_url, 'Pinterest Captured Asset')
+        else:
+            add_img(net_url, 'Captured Network Asset')
 
     # --- Yandex Metadata Extraction (Highest Resolution) ---
     best_images = {}
