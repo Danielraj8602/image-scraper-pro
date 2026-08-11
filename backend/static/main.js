@@ -103,10 +103,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateThemeUI(theme) {
         if (theme === 'light') {
             themeToggleBtn.innerHTML = '<i data-lucide="moon"></i>';
-            themeToggleBtn.setAttribute('title', 'Switch to MEDIA FIREWALL Dark Theme');
+            themeToggleBtn.setAttribute('title', 'Switch to Gen-Z Cyber Void Dark Mode');
         } else {
             themeToggleBtn.innerHTML = '<i data-lucide="sun"></i>';
-            themeToggleBtn.setAttribute('title', 'Switch to MEDIA FIREWALL Light Theme');
+            themeToggleBtn.setAttribute('title', 'Switch to Gen-Z Hyper Vapor Light Mode');
         }
         lucide.createIcons();
     }
